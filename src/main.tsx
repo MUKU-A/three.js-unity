@@ -6,6 +6,10 @@ import '@fontsource/inter/600.css'
 import 'dockview-react/dist/styles/dockview.css'
 import './index.css'
 import App from './App'
+import { useEditorStore } from './store/editorStore'
+
+/* E2E検証・デバッグ用フック */
+;(window as unknown as { __store: typeof useEditorStore }).__store = useEditorStore
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

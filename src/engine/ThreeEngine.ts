@@ -51,7 +51,7 @@ class ThreeEngine {
   private lastNodes: Record<NodeId, SceneNode> = {}
   private prevSceneRef: unknown = null
 
-  private grid: THREE.GridHelper
+  private grid: THREE.Mesh
   private sky: THREE.Mesh
   private hemi: THREE.HemisphereLight
 
@@ -75,13 +75,8 @@ class ThreeEngine {
     this.hemi.userData.noPick = true
     this.scene.add(this.hemi)
 
-    /* グリッド (1m間隔) */
-    this.grid = new THREE.GridHelper(200, 200, 0x555555, 0x3d3d3d)
-    const gmat = this.grid.material as THREE.LineBasicMaterial
-    gmat.transparent = true
-    gmat.opacity = 0.55
-    gmat.depthWrite = false
-    this.grid.userData.noPick = true
+    /* グリッド (1m間隔・10mメジャー線・距離フェードのシェーダグリッド) */
+    this.grid = makeUnityGrid()
     this.scene.add(this.grid)
 
     /* 初期同期 + 購読開始 */
@@ -594,6 +589,8 @@ class ThreeEngine {
     }
 
     this.orbit?.update()
+    /* グリッドをカメラ追従 (模様はワールド座標基準なので継ぎ目なく無限に見える) */
+    this.grid.position.set(Math.round(this.camera.position.x / 10) * 10, 0, Math.round(this.camera.position.z / 10) * 10)
     for (const box of this.selectionBoxes.values()) box.update()
     ;(this.lightHelper as unknown as { update?: () => void })?.update?.()
     this.cameraHelper?.update()
@@ -666,15 +663,71 @@ const round6 = (n: number) => Math.round(n * 1e6) / 1e6
 const round3 = (n: number) => Math.round(n * 1e3) / 1e3
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
 
+/**
+ * Unity風シェーダグリッド。
+ * GridHelper(長大なGL_LINES)はソフトウェアGL環境でクリッピング欠けが出るため、
+ * クアッド+fwidthアンチエイリアスの手続きグリッドにする (実GPUでも距離フェードで見た目が良い)。
+ */
+function makeUnityGrid(): THREE.Mesh {
+  const SIZE = 500
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE)
+  geo.rotateX(-Math.PI / 2)
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      minorColor: { value: new THREE.Color('#5f5f5f') },
+      majorColor: { value: new THREE.Color('#8b8b8b') },
+      fadeDist: { value: 120.0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorld;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 minorColor; uniform vec3 majorColor; uniform float fadeDist;
+      varying vec3 vWorld;
+      float gridLine(vec2 p, float scale) {
+        vec2 c = p / scale;
+        vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
+        float line = min(g.x, g.y);
+        return 1.0 - min(line, 1.0);
+      }
+      void main() {
+        vec2 p = vWorld.xz;
+        float minor = gridLine(p, 1.0);
+        float major = gridLine(p, 10.0);
+        float dist = distance(cameraPosition.xz, p);
+        float fade = 1.0 - smoothstep(fadeDist * 0.45, fadeDist, dist);
+        float alpha = max(minor * 0.30, major * 0.55) * fade;
+        if (alpha < 0.003) discard;
+        vec3 col = major > minor ? majorColor : minorColor;
+        gl_FragColor = vec4(col, alpha);
+        #include <colorspace_fragment>
+      }
+    `,
+  })
+  const grid = new THREE.Mesh(geo, mat)
+  grid.userData.noPick = true
+  grid.renderOrder = -500
+  grid.frustumCulled = false
+  return grid
+}
+
 function makeGradientSky(): THREE.Mesh {
   const geo = new THREE.SphereGeometry(2000, 24, 12)
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      top: { value: new THREE.Color('#3d5a75') },
-      horizon: { value: new THREE.Color('#7e8891') },
-      bottom: { value: new THREE.Color('#33373b') },
+      top: { value: new THREE.Color('#4a6b8c') },
+      horizon: { value: new THREE.Color('#96a0a9') },
+      bottom: { value: new THREE.Color('#3d4145') },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -688,10 +741,12 @@ function makeGradientSky(): THREE.Mesh {
       varying vec3 vDir;
       void main() {
         float y = vDir.y;
+        /* 地平線上: 空グラデ / 下: Unity風フラットな暗いグラウンド */
         vec3 c = y > 0.0
           ? mix(horizon, top, pow(min(y * 1.6, 1.0), 0.8))
-          : mix(horizon, bottom, pow(min(-y * 2.5, 1.0), 0.6));
+          : mix(horizon, bottom, min(-y * 18.0, 1.0));
         gl_FragColor = vec4(c, 1.0);
+        #include <colorspace_fragment>
       }
     `,
   })
@@ -705,6 +760,10 @@ function makeGradientSky(): THREE.Mesh {
 /** シングルトン */
 let engine: ThreeEngine | null = null
 export function getEngine(): ThreeEngine {
-  if (!engine) engine = new ThreeEngine()
+  if (!engine) {
+    engine = new ThreeEngine()
+    /* E2E検証・デバッグ用フック */
+    ;(window as unknown as { __engine: ThreeEngine }).__engine = engine
+  }
   return engine
 }
