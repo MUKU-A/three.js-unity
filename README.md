@@ -32,9 +32,11 @@ npm run build    # 本番ビルド (tsc + vite)
 - **スクリプト (MonoBehaviour相当)**: `onStart / onUpdate / onFixedUpdate / onLateUpdate / onDestroy /
   onCollisionEnter・Exit / onTriggerEnter・Exit` をJSで記述。`const props = {...}` の宣言が
   **Inspectorに自動でフィールド化**され、値は保存される。ctx API:
-  `node.position/rotation/scale`、`find`、**`instantiate` / `destroy`**、**`physics.raycast`**、
-  **`startCoroutine`(generator, `yield 秒`)**、**`animation.play(clip, fade)`**、
-  `input.getKey/getKeyDown`、`time`、`log`。内蔵スクリプトエディタ付き
+  `node.position/rotation/scale/worldPosition`、**`node.getComponent(型|スクリプト名)`** (live読み書き)、
+  **`node.setParent`**、`find`、**`instantiate` / `destroy`**、**`physics.raycast`**、
+  **`screenPointToRay`**、**`startCoroutine`**(generator, `yield 秒`)、**`animation.play(clip, fade)`**、
+  `input.getKey/getKeyDown/getMouseButton/getMouseButtonDown/mousePosition`、`time`、`log`。
+  内蔵スクリプトエディタ付き
 - **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰) と Box/Sphere Collider
   (反発/摩擦/センター/サイズ/**Is Trigger**、選択中は緑ワイヤーフレーム表示)。固定50Hzステップ、
   **衝突/トリガーイベントをスクリプトへ配送**。▶ 再生で落下・衝突し、⏹ 停止で完全復元。

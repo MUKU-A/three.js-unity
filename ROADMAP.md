@@ -50,6 +50,8 @@
 | (前回対応) Gameビュー/メニューバー/Unity操作系 | ✅ D-019〜D-024 |
 | **Prefabシステム v1** | ✅ 作成/インスタンス化/Apply(全インスタンス伝播・1Undo)/Revert(root transform維持)/Unpack、Hierarchy青表示、JSON永続化 (D-029)。差分オーバーライド・Nested/Variantは残 (P2) |
 | ライフサイクル完全化 | ✅ onAwake → onEnable → onStart → (Update系) → onDisable → onDestroy の厳密順序 (D-030) |
+| **マウス入力 + ScreenPointToRay** | ✅ ctx.input.getMouseButton/Down・mousePosition (Gameビュー左下原点px) + ctx.screenPointToRay → physics.raycast でクリック判定が完結 (D-031) |
+| **GetComponent / SetParent / worldPosition** | ✅ ctx.node.getComponent(型 or スクリプト名) の live読み書きプロキシ、setParent (循環ガード付き)、worldPosition (D-031) |
 
 ## 未対応 — 優先度順の実装計画
 
@@ -59,7 +61,6 @@
 - **オーディオ**: AudioSource/AudioListenerコンポーネント (THREE.PositionalAudio)、.mp3/.wavインポート。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。
-- **マウス入力API**: ctx.input.getMouseButton / mousePosition (Gameビュー座標系)。
 - **ジョイント**: Fixed/Hinge/Spring (Rapierのimpulse joints結線)。
 
 ### P2 (価値は高いが規模が大きい)

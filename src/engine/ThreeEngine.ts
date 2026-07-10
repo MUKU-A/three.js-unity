@@ -84,19 +84,30 @@ class ThreeEngine {
   /* --- 矩形選択 (D-021) --- */
   private band: { startX: number; startY: number; el: HTMLDivElement; active: boolean; additive: boolean } | null = null
 
-  /* --- スクリプト/物理ランタイム (D-025/D-026/D-028) --- */
+  /* --- スクリプト/物理ランタイム (D-025/D-026/D-028/D-031) --- */
   private readonly gameKeys = new Set<string>()
   private readonly gameKeysDown = new Set<string>()
+  private readonly gameMouseButtons = new Set<number>()
+  private readonly gameMouseButtonsDown = new Set<number>()
+  private readonly gameMousePos = { x: 0, y: 0 }
   private readonly scriptRuntime = new ScriptRuntime(
     {
       getKey: (k) => this.gameKeys.has(k.toLowerCase()),
       getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
+      getMouseButton: (b) => this.gameMouseButtons.has(b),
+      getMouseButtonDown: (b) => this.gameMouseButtonsDown.has(b),
+      mousePosition: this.gameMousePos,
     },
     {
       raycast: (origin, dir, maxDistance) => this.physicsWorld.raycast(origin, dir, maxDistance),
       instantiateNode: (sourceId, position) => this.instantiateNode(sourceId, position),
       destroyNode: (id) => this.destroyNode(id),
       playAnimation: (nodeId, clipName, fade) => this.playAnimation(nodeId, clipName, fade),
+      screenPointToRay: (x, y) => this.screenPointToRay(x, y),
+      getWorldPosition: (id) => {
+        const v = this.objectMap.get(id)?.getWorldPosition(new THREE.Vector3())
+        return v ? { x: v.x, y: v.y, z: v.z } : { x: 0, y: 0, z: 0 }
+      },
     },
   )
   private physicsWorld = new PhysicsWorld()
@@ -251,6 +262,7 @@ class ThreeEngine {
       this.gameRenderer.shadowMap.enabled = true
       this.gameRenderer.shadowMap.type = THREE.PCFSoftShadowMap
       this.gameRenderer.setPixelRatio(window.devicePixelRatio)
+      this.bindGameInput(this.gameRenderer.domElement)
     }
     el.appendChild(this.gameRenderer.domElement)
     this.gameRenderer.domElement.style.display = 'block'
@@ -270,6 +282,40 @@ class ThreeEngine {
       this.gameRenderer.domElement.parentElement.removeChild(this.gameRenderer.domElement)
     }
     this.gameMount = null
+  }
+
+  /** Gameビューのマウス入力 (ctx.input.getMouseButton / mousePosition, D-031)。座標は左下原点px (Unity互換) */
+  private bindGameInput(el: HTMLElement) {
+    const updatePos = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect()
+      this.gameMousePos.x = e.clientX - r.left
+      this.gameMousePos.y = r.height - (e.clientY - r.top)
+    }
+    el.addEventListener('pointermove', updatePos)
+    el.addEventListener('pointerdown', (e) => {
+      updatePos(e)
+      if (useEditorStore.getState().mode !== 'play') return
+      if (!this.gameMouseButtons.has(e.button)) this.gameMouseButtonsDown.add(e.button)
+      this.gameMouseButtons.add(e.button)
+    })
+    el.addEventListener('pointerup', (e) => this.gameMouseButtons.delete(e.button))
+    el.addEventListener('contextmenu', (e) => e.preventDefault())
+    el.addEventListener('blur', () => this.gameMouseButtons.clear())
+  }
+
+  /** Camera.ScreenPointToRay 相当 (ゲームカメラ基準、x/y は Gameビュー左下原点px) */
+  private screenPointToRay(x: number, y: number): { origin: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } } | null {
+    const cam = this.findGameCamera(useEditorStore.getState())
+    if (!cam || !this.gameMount) return null
+    const w = Math.max(1, this.gameMount.clientWidth)
+    const h = Math.max(1, this.gameMount.clientHeight)
+    const ndc = new THREE.Vector2((x / w) * 2 - 1, (y / h) * 2 - 1) // yは左下原点なのでそのまま
+    const rc = new THREE.Raycaster()
+    rc.setFromCamera(ndc, cam)
+    return {
+      origin: { x: rc.ray.origin.x, y: rc.ray.origin.y, z: rc.ray.origin.z },
+      direction: { x: rc.ray.direction.x, y: rc.ray.direction.y, z: rc.ray.direction.z },
+    }
   }
 
   /* ---------------- 方位ギズモからの軸整列 (Unityのシーンギズモ相当) ---------------- */
@@ -1028,6 +1074,7 @@ class ThreeEngine {
       }
       this.scriptRuntime.lateUpdate(dt)
       this.gameKeysDown.clear()
+      this.gameMouseButtonsDown.clear()
     }
 
     /* フライスルー移動 (右ドラッグ中 WASDQE / Shift=高速 / ホイール=速度) */

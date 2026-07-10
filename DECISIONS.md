@@ -165,6 +165,19 @@
   全Awake→全Start保証を再現)。破棄/停止時は onDisable → onDestroy。
 - 再生中の enabled/visible トグルによる OnEnable/OnDisable 発火は未対応 (制限として明記)。
 
+## D-031: スクリプトAPIの空間/入力/コンポーネント補完 (レビュー第4弾対応)
+- **マウス入力**: Gameビューcanvasで収集し、mousePositionは左下原点px (Unity互換)。
+  getMouseButtonDownはフレーム毎クリア。編集モード中は収集しない。
+- **screenPointToRay**: ゲームカメラ基準のRaycaster.setFromCamera。physics.raycastへ
+  そのまま渡せる形 ({origin, direction}) で返し、ScreenPointToRay+Physics.Raycastの
+  Unity頻出イディオムを2行で再現できる。
+- **getComponent**: JS Proxyで実装し、読みは常にSSoTの現在値・書きはtransientPatchComponent。
+  型名に加えスクリプト名でも検索可 (GetComponent<MyScript>()相当)。
+  制限: rigidbody/colliderの物理パラメータ変更は再生中のワールドへは反映されない
+  (ボディは▶時に構築されるため。ROADMAPに記載)。
+- **setParent**: transientReparent (履歴外・停止で復元)。自己の子孫への付け替えはガード。
+- **worldPosition**: エンジンのObject3Dから読む読み取り専用値。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

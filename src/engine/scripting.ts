@@ -9,6 +9,7 @@
  * 再生中の変更 (動的生成含む) は停止時にスナップショットから完全復元される (D-006)。
  */
 import type { NodeId, ScriptComponent, Transform, Vec3 } from '../types/scene'
+import { isDescendantOf } from '../types/scene'
 import { useEditorStore } from '../store/editorStore'
 import type { RaycastHit } from './physics'
 
@@ -21,6 +22,9 @@ export interface VecProxy {
   set(x: number, y: number, z: number): void
 }
 
+/** コンポーネントへの読み書きプロキシ (GetComponent相当)。プロパティは live に SSoT を読む */
+export type ComponentProxy = Record<string, unknown> & { readonly type: string }
+
 export interface NodeProxy {
   readonly id: NodeId
   readonly name: string
@@ -28,22 +32,43 @@ export interface NodeProxy {
   rotation: VecProxy
   scale: VecProxy
   visible: boolean
+  /** UnityのGetComponent: 'material' | 'light' | 'rigidbody' | 'script' 等。scriptは名前でも探せる */
+  getComponent(type: string): ComponentProxy | null
+  /** Unityの transform.SetParent (nullでルートへ)。再生中のみ有効・停止で復元 */
+  setParent(parent: NodeProxy | null): void
+  /** ワールド座標 (読み取り専用) */
+  readonly worldPosition: { x: number; y: number; z: number }
 }
 
-/** エンジンがランタイムへ提供する機能 (物理・動的生成・アニメーション) */
+/** エンジンがランタイムへ提供する機能 (物理・動的生成・アニメーション・カメラ) */
 export interface EngineBridge {
   raycast(origin: Vec3, dir: Vec3, maxDistance?: number): RaycastHit | null
   /** サブツリー複製を動的生成し、新ルートIDを返す */
   instantiateNode(sourceId: NodeId, position?: Vec3): NodeId | null
   destroyNode(id: NodeId): void
   playAnimation(nodeId: NodeId, clipName: string | null, fadeSeconds: number): void
+  /** Gameビュー座標 (左下原点px) からゲームカメラのレイを得る (Camera.ScreenPointToRay相当) */
+  screenPointToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } | null
+  getWorldPosition(id: NodeId): Vec3
+}
+
+export interface GameInput {
+  getKey(key: string): boolean
+  getKeyDown(key: string): boolean
+  /** 0=左 1=中 2=右 (Unity互換) */
+  getMouseButton(button: number): boolean
+  getMouseButtonDown(button: number): boolean
+  /** Gameビュー内のマウス座標 (左下原点px, Unity互換)。ビュー外は最後の値 */
+  readonly mousePosition: { x: number; y: number }
 }
 
 export interface ScriptCtx {
   node: NodeProxy
   props: Record<string, number | string | boolean>
   time: { elapsed: number; delta: number }
-  input: { getKey(key: string): boolean; getKeyDown(key: string): boolean }
+  input: GameInput
+  /** Camera.ScreenPointToRay 相当。input.mousePosition と組み合わせてクリック判定に使う */
+  screenPointToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } | null
   find(name: string): NodeProxy | null
   log(message: unknown): void
   /** Unityの Instantiate: 既存ノード(名前 or proxy)を複製して配置。返り値は新ノードのproxy */
@@ -103,7 +128,30 @@ function makeVecProxy(id: NodeId, key: keyof Transform): VecProxy {
   }
 }
 
-export function makeNodeProxy(id: NodeId): NodeProxy {
+/** コンポーネントの live 読み書きプロキシ (書き込みは transientPatchComponent 経由) */
+function makeComponentProxy(id: NodeId, componentIndex: number): ComponentProxy {
+  return new Proxy(
+    {},
+    {
+      get(_t, key: string) {
+        const c = st().scene.nodes[id]?.components[componentIndex] as unknown as Record<string, unknown> | undefined
+        return c?.[key]
+      },
+      set(_t, key: string, value: unknown) {
+        const c = st().scene.nodes[id]?.components[componentIndex]
+        if (!c || key === 'type') return false
+        st().transientPatchComponent(id, componentIndex, { [key]: value } as never)
+        return true
+      },
+      has(_t, key: string) {
+        const c = st().scene.nodes[id]?.components[componentIndex] as unknown as Record<string, unknown> | undefined
+        return !!c && key in c
+      },
+    },
+  ) as ComponentProxy
+}
+
+export function makeNodeProxy(id: NodeId, bridge?: EngineBridge): NodeProxy {
   return {
     id,
     get name() {
@@ -117,6 +165,26 @@ export function makeNodeProxy(id: NodeId): NodeProxy {
     },
     set visible(v: boolean) {
       if (st().scene.nodes[id]) st().transientPatchNode(id, { visible: v })
+    },
+    getComponent(type: string) {
+      const node = st().scene.nodes[id]
+      if (!node) return null
+      /* type一致、またはスクリプト名一致 (GetComponent<MyScript>() 相当) */
+      const idx = node.components.findIndex(
+        (c) => c.type === type || (c.type === 'script' && (c as { name?: string }).name === type),
+      )
+      return idx >= 0 ? makeComponentProxy(id, idx) : null
+    },
+    setParent(parent: NodeProxy | null) {
+      const g = st().scene
+      if (!g.nodes[id]) return
+      const pid = parent ? parent.id : null
+      if (pid && !g.nodes[pid]) return
+      if (pid && isDescendantOf(g.nodes, pid, id)) return // 自分の子孫には付けられない
+      st().transientReparent(id, pid)
+    },
+    get worldPosition() {
+      return bridge ? bridge.getWorldPosition(id) : (st().scene.nodes[id]?.transform.position ?? { x: 0, y: 0, z: 0 })
     },
   }
 }
@@ -199,11 +267,11 @@ export class ScriptRuntime {
   private instances: ScriptInstance[] = []
   private coroutines: Coroutine[] = []
   private elapsed = 0
-  private input: { getKey(k: string): boolean; getKeyDown(k: string): boolean }
+  private input: GameInput
   private bridge: EngineBridge
   private proxyCache = new Map<NodeId, NodeProxy>()
 
-  constructor(input: { getKey(k: string): boolean; getKeyDown(k: string): boolean }, bridge: EngineBridge) {
+  constructor(input: GameInput, bridge: EngineBridge) {
     this.input = input
     this.bridge = bridge
   }
@@ -215,7 +283,7 @@ export class ScriptRuntime {
   private proxyFor(id: NodeId): NodeProxy {
     let p = this.proxyCache.get(id)
     if (!p) {
-      p = makeNodeProxy(id)
+      p = makeNodeProxy(id, this.bridge)
       this.proxyCache.set(id, p)
     }
     return p
@@ -311,6 +379,9 @@ export class ScriptRuntime {
         delta: 0,
       },
       input: this.input,
+      screenPointToRay(x: number, y: number) {
+        return self.bridge.screenPointToRay(x, y)
+      },
       find(name: string) {
         const found = Object.values(st().scene.nodes).find((n) => n.name === name)
         return found ? self.proxyFor(found.id) : null

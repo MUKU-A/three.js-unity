@@ -78,6 +78,8 @@ export interface EditorState {
   /** ランタイム動的生成/破棄 (Instantiate/Destroy, 履歴に載せない。停止時にスナップショットで消える) */
   transientAddSubtree(nodes: SceneNode[], parentId: NodeId | null): void
   transientRemoveSubtree(id: NodeId): void
+  /** ランタイム親子変更 (ctx.node.setParent, 履歴に載せない) */
+  transientReparent(id: NodeId, parentId: NodeId | null): void
 
   /* --- scene全置換 (ロード時) --- */
   replaceScene(scene: SceneGraph, assets: AssetMeta[]): void
@@ -208,6 +210,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       scene: ops.removeSubtree(s.scene, id).graph,
       selection: s.selection.filter((x) => x !== id),
     }))
+  },
+  transientReparent(id, parentId) {
+    set((s) => ({ scene: ops.reparent(s.scene, id, parentId, null) }))
   },
 
   replaceScene(scene, assets) {
