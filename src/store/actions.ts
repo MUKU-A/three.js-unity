@@ -15,26 +15,32 @@ import {
   topmostOnly,
   useEditorStore,
 } from './editorStore'
-import { cloneSubtree } from './sceneOps'
+import { cloneSubtree, uniqueSiblingName } from './sceneOps'
 
 const st = () => useEditorStore.getState()
 
+/** Unity同様、作成時に兄弟内で名前を一意化 ("Cube" → "Cube (1)") */
+const uniquify = (node: SceneNode, parentId: NodeId | null): SceneNode => {
+  node.name = uniqueSiblingName(st().scene, node.name, parentId)
+  return node
+}
+
 export function createEmpty(parentId: NodeId | null = null) {
-  st().execute(cmdAddObject([makeEmptyNode()], parentId))
+  st().execute(cmdAddObject([uniquify(makeEmptyNode(), parentId)], parentId))
 }
 
 export function createPrimitive(kind: PrimitiveKind, parentId: NodeId | null = null) {
-  const node = makePrimitiveNode(kind)
+  const node = uniquify(makePrimitiveNode(kind), parentId)
   st().execute(cmdAddObject([node], parentId))
   st().log('info', `Created ${node.name}`)
 }
 
 export function createLight(kind: LightKind, parentId: NodeId | null = null) {
-  st().execute(cmdAddObject([makeLightNode(kind)], parentId))
+  st().execute(cmdAddObject([uniquify(makeLightNode(kind), parentId)], parentId))
 }
 
 export function createCamera(parentId: NodeId | null = null) {
-  st().execute(cmdAddObject([makeCameraNode()], parentId))
+  st().execute(cmdAddObject([uniquify(makeCameraNode(), parentId)], parentId))
 }
 
 export function deleteSelection(ids?: NodeId[]) {

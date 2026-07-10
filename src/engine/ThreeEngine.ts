@@ -589,8 +589,9 @@ class ThreeEngine {
     }
 
     this.orbit?.update()
-    /* グリッドをカメラ追従 (模様はワールド座標基準なので継ぎ目なく無限に見える) */
+    /* グリッド/空をカメラ追従 (グリッド模様はワールド座標基準なので継ぎ目なく無限に見える) */
     this.grid.position.set(Math.round(this.camera.position.x / 10) * 10, 0, Math.round(this.camera.position.z / 10) * 10)
+    this.sky.position.copy(this.camera.position)
     for (const box of this.selectionBoxes.values()) box.update()
     ;(this.lightHelper as unknown as { update?: () => void })?.update?.()
     this.cameraHelper?.update()
@@ -633,11 +634,15 @@ class ThreeEngine {
         d.sprite.visible = false
       }
 
+      /* 空はプレビューカメラ位置へ移して描く (BackSide球の内側に入れる) */
+      const skyPos = this.sky.position.clone()
+      previewCam.getWorldPosition(this.sky.position)
       this.renderer.setScissorTest(true)
       this.renderer.setScissor(px, py, pw, ph)
       this.renderer.setViewport(px, py, pw, ph)
       this.renderer.render(this.scene, previewCam)
       this.renderer.setScissorTest(false)
+      this.sky.position.copy(skyPos)
 
       if (this.cameraHelper) this.cameraHelper.visible = helperWasVisible
       if (gizmoHelper) gizmoHelper.visible = gizmoWasVisible
@@ -720,7 +725,8 @@ function makeUnityGrid(): THREE.Mesh {
 }
 
 function makeGradientSky(): THREE.Mesh {
-  const geo = new THREE.SphereGeometry(2000, 24, 12)
+  /* 半径は小さくてよい: 頂点シェーダで常に far 平面へ張り付け、位置はカメラ追従させる */
+  const geo = new THREE.SphereGeometry(1, 24, 12)
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -734,6 +740,7 @@ function makeGradientSky(): THREE.Mesh {
       void main() {
         vDir = normalize(position);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position.z = gl_Position.w * 0.999999; // 常に最遠 (どの far 設定でも描ける)
       }
     `,
     fragmentShader: /* glsl */ `

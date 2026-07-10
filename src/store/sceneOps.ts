@@ -146,15 +146,25 @@ export function cloneSubtree(
       childrenIds: n.childrenIds.map((c) => idMap.get(c)!),
     }
   })
-  cloned[0] = { ...cloned[0], name: duplicateName(graph, src.name, src.parentId) }
+  cloned[0] = { ...cloned[0], name: uniqueSiblingName(graph, src.name, src.parentId, true) }
   return { nodes: cloned, rootId: idMap.get(rootId)! }
 }
 
-/** Unity風の複製名: "Cube" → "Cube (1)" → "Cube (2)" */
-function duplicateName(graph: SceneGraph, base: string, parentId: NodeId | null): string {
+/**
+ * Unity風の一意名: "Cube" → (空いていなければ) "Cube (1)" → "Cube (2)"。
+ * forceSuffix=true (複製時) は元名が空いていても必ず連番を付ける挙動ではなく、
+ * 元名が使用中なので自然に (n) が付く。
+ */
+export function uniqueSiblingName(
+  graph: SceneGraph,
+  base: string,
+  parentId: NodeId | null,
+  forceSuffix = false,
+): string {
   const stripped = base.replace(/ \(\d+\)$/, '')
   const siblings = parentId === null ? graph.rootIds : (graph.nodes[parentId]?.childrenIds ?? [])
   const names = new Set(siblings.map((id) => graph.nodes[id]?.name))
+  if (!forceSuffix && !names.has(stripped)) return stripped
   let i = 1
   let candidate = `${stripped} (${i})`
   while (names.has(candidate)) {
