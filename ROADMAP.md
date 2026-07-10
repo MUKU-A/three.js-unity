@@ -52,13 +52,13 @@
 | ライフサイクル完全化 | ✅ onAwake → onEnable → onStart → (Update系) → onDisable → onDestroy の厳密順序 (D-030) |
 | **マウス入力 + ScreenPointToRay** | ✅ ctx.input.getMouseButton/Down・mousePosition (Gameビュー左下原点px) + ctx.screenPointToRay → physics.raycast でクリック判定が完結 (D-031) |
 | **GetComponent / SetParent / worldPosition** | ✅ ctx.node.getComponent(型 or スクリプト名) の live読み書きプロキシ、setParent (循環ガード付き)、worldPosition (D-031) |
+| **オーディオ (AudioSource)** | ✅ .mp3/.wav/.oggインポート、AudioSource (volume/loop/playOnAwake/spatial/距離減衰)、GameカメラへのListener自動付帯、⏸連動suspend、ctx.playSound ワンショット (D-032)。Audio Mixerは対象外 |
 
 ## 未対応 — 優先度順の実装計画
 
 ### P1 (次のイテレーション候補)
 - **Prefab v2**: プロパティ単位の差分オーバーライド (現状は全体置換のv1)、Nested Prefab、Variant、
   差分のApply/Revert個別選択UI。
-- **オーディオ**: AudioSource/AudioListenerコンポーネント (THREE.PositionalAudio)、.mp3/.wavインポート。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。
 - **ジョイント**: Fixed/Hinge/Spring (Rapierのimpulse joints結線)。

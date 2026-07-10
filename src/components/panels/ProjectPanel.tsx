@@ -3,7 +3,7 @@
  * RunPod/ComfyUI パイプライン等で生成した GLB の取り込み口 (Import ボタン / ここへの直接ドロップ)。
  */
 import { useRef, useState } from 'react'
-import { Box, FileUp, Image as ImageIcon, Package, Trash2 } from 'lucide-react'
+import { Box, FileUp, Image as ImageIcon, Music, Package, Trash2 } from 'lucide-react'
 import { useEditorStore, cmdAddObject, makeGlbNode } from '../../store/editorStore'
 import { getAsset, importFile, removeAsset } from '../../engine/assets'
 import { instantiatePrefab } from '../../store/actions'
@@ -62,7 +62,7 @@ export function ProjectPanel() {
           ref={fileRef}
           type="file"
           multiple
-          accept=".glb,.gltf,.fbx,.obj,.png,.jpg,.jpeg,.webp"
+          accept=".glb,.gltf,.fbx,.obj,.mp3,.wav,.ogg,.png,.jpg,.jpeg,.webp"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) void doImport(e.target.files)
@@ -166,6 +166,8 @@ function AssetTile({
           <ImageIcon size={22} className="text-u-sub" />
         ) : meta.type === 'prefab' ? (
           <Box size={24} className="text-[#8ab8e8]" />
+        ) : meta.type === 'audio' ? (
+          <Music size={22} className="text-[#e8c97f]" />
         ) : (
           <Package size={24} className="text-[#8fb6d9]" />
         )}

@@ -178,6 +178,16 @@
 - **setParent**: transientReparent (履歴外・停止で復元)。自己の子孫への付け替えはガード。
 - **worldPosition**: エンジンのObject3Dから読む読み取り専用値。
 
+## D-032: オーディオ = AudioSourceコンポーネント + Gameカメラ自動Listener
+- AudioListenerは専用コンポーネントにせず、▶時にアクティブなGameカメラへ自動付帯
+  (Unityの新規シーンでMain CameraにListenerが付いているデフォルト構成の再現)。
+- spatial=true は THREE.PositionalAudio (ノード追従・linear減衰 minDistance/maxDistance)、
+  false は 2D。デコードはアセットID毎にキャッシュし、▶クリック(ユーザージェスチャ)で
+  AudioContextをresume。⏸でsuspend/再開、⏹で全停止・破棄。
+- 再生中の volume/loop 変更はSSoT購読からlive反映 (getComponentプロキシ経由の変更も効く)。
+- ctx.playSound(名前|ID, volume) は自ノード位置からの3Dワンショット (PlayOneShot相当)。
+- Audio Mixer / エフェクトルーティングはスコープ外 (ROADMAP)。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

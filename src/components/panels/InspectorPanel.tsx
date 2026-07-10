@@ -3,9 +3,10 @@
  * マルチ選択時はアクティブ(末尾)を表示 (D-010)。
  */
 import { useRef, useState } from 'react'
-import { Box, Camera, FileCode, Lightbulb, Palette, Plus, Search, Shield, Weight } from 'lucide-react'
+import { Box, Camera, FileCode, Lightbulb, Palette, Plus, Search, Shield, Volume2, Weight } from 'lucide-react'
 import { activeNodeId, cmdAddComponent, cmdPatchNode, useEditorStore } from '../../store/editorStore'
 import {
+  defaultAudioSource,
   defaultCamera,
   defaultCollider,
   defaultLight,
@@ -18,7 +19,7 @@ import {
 import type { Component } from '../../types/scene'
 import { NodeIcon } from '../common/NodeIcon'
 import { CameraSection, LightSection, MaterialSection, MeshSection, TransformSection } from '../inspector/sections'
-import { ColliderSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
+import { AudioSourceSection, ColliderSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
 
 export function InspectorPanel() {
   const node = useEditorStore((s) => {
@@ -56,6 +57,8 @@ export function InspectorPanel() {
             return <RigidbodySection key={k} node={node} comp={c} index={i} />
           case 'collider':
             return <ColliderSection key={k} node={node} comp={c} index={i} />
+          case 'audiosource':
+            return <AudioSourceSection key={k} node={node} comp={c} index={i} />
           default:
             return null
         }
@@ -139,6 +142,7 @@ const COMPONENT_DEFS: Array<{
   { type: 'rigidbody', label: 'Rigidbody', icon: <Weight size={13} />, make: () => defaultRigidbody() },
   { type: 'collider', label: 'Box Collider', icon: <Shield size={13} />, make: () => defaultCollider('box') },
   { type: 'collider', label: 'Sphere Collider', icon: <Shield size={13} />, make: () => defaultCollider('sphere') },
+  { type: 'audiosource', label: 'Audio Source', icon: <Volume2 size={13} />, make: () => defaultAudioSource() },
 ]
 
 function AddComponentButton({ nodeId }: { nodeId: string }) {

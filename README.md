@@ -46,6 +46,9 @@ npm run build    # 本番ビルド (tsc + vite)
 - **Prefab**: 右クリック「Create Prefab」でアセット化 (Hierarchyで**青表示**)、Projectから
   インスタンス化 (DnD/Add to Scene)、**Apply to Prefab** (全インスタンスへ伝播・1 Undo) /
   **Revert** (rootのTransformは維持) / **Unpack**。シーンJSONに自動で内蔵保存される
+- **オーディオ**: .mp3/.wav/.ogg インポート、**Audio Source** コンポーネント
+  (Volume/Loop/Play On Awake/**3D空間減衰**)、ListenerはGameカメラへ自動付帯、
+  ⏸で一時停止連動、スクリプトから `ctx.playSound(name)` でワンショット再生
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play

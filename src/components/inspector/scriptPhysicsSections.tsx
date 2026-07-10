@@ -3,8 +3,8 @@
  * ScriptSection は props宣言を自動でフィールド化する (Unityの[SerializeField]リフレクション相当)。
  */
 import { useState, type ReactNode } from 'react'
-import { ChevronRight, FileCode, MoreVertical, Shield, Weight } from 'lucide-react'
-import type { ColliderComponent, RigidbodyComponent, ScriptComponent, SceneNode, Vec3 } from '../../types/scene'
+import { ChevronRight, FileCode, MoreVertical, Shield, Volume2, Weight } from 'lucide-react'
+import type { AudioSourceComponent, ColliderComponent, RigidbodyComponent, ScriptComponent, SceneNode, Vec3 } from '../../types/scene'
 import { cmdPatchComponent, cmdRemoveComponent, useEditorStore } from '../../store/editorStore'
 import { compileScript, extractProps } from '../../engine/scripting'
 import { useContextMenu, type MenuItem } from '../common/ContextMenu'
@@ -266,6 +266,48 @@ export function RigidbodySection({ node, comp, index }: { node: SceneNode; comp:
           <NumberRow label="Angular Damping" value={comp.angularDamping} {...key<number>('angularDamping')} />
           <CheckboxRow label="Use Gravity" value={comp.useGravity} onCommit={(b, a) => key<boolean>('useGravity').onCommit(b, a)} />
           <CheckboxRow label="Is Kinematic" value={comp.isKinematic} onCommit={(b, a) => key<boolean>('isKinematic').onCommit(b, a)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------------------------------- AudioSource ---------------------------------- */
+
+export function AudioSourceSection({ node, comp, index }: { node: SceneNode; comp: AudioSourceComponent; index: number }) {
+  const [open, setOpen] = useState(true)
+  const { key } = useComponentCommit(node.id, index)
+  const assets = useEditorStore((s) => s.assets)
+  const audioAssets = assets.filter((a) => a.type === 'audio')
+  return (
+    <div>
+      <Header
+        icon={<Volume2 size={13} className="text-[#e8c97f]" />}
+        title="Audio Source"
+        open={open}
+        onToggle={() => setOpen(!open)}
+        menuItems={removeMenu(node.id, index)}
+        enabled={comp.enabled !== false}
+        onToggleEnabled={() => key<boolean>('enabled', 'Toggle Audio Source').onCommit(comp.enabled !== false, comp.enabled === false)}
+      />
+      {open && (
+        <div className="py-1 flex flex-col gap-[2px]">
+          <SelectRow
+            label="AudioClip"
+            value={comp.assetId ?? ''}
+            options={[{ value: '', label: 'None (Audio Clip)' }, ...audioAssets.map((a) => ({ value: a.id, label: a.name }))]}
+            onCommit={(b, a) => key<string | null>('assetId', 'Set Audio Clip').onCommit(b === '' ? null : b, a === '' ? null : a)}
+          />
+          <SliderRow label="Volume" value={comp.volume} {...key<number>('volume')} />
+          <CheckboxRow label="Loop" value={comp.loop} onCommit={(b, a) => key<boolean>('loop').onCommit(b, a)} />
+          <CheckboxRow label="Play On Awake" value={comp.playOnAwake} onCommit={(b, a) => key<boolean>('playOnAwake').onCommit(b, a)} />
+          <CheckboxRow label="Spatial (3D)" value={comp.spatial} onCommit={(b, a) => key<boolean>('spatial').onCommit(b, a)} />
+          {comp.spatial && (
+            <>
+              <NumberRow label="Min Distance" value={comp.minDistance} {...key<number>('minDistance')} />
+              <NumberRow label="Max Distance" value={comp.maxDistance} {...key<number>('maxDistance')} />
+            </>
+          )}
         </div>
       )}
     </div>

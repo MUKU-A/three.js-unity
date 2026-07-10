@@ -50,6 +50,8 @@ export interface EngineBridge {
   /** Gameビュー座標 (左下原点px) からゲームカメラのレイを得る (Camera.ScreenPointToRay相当) */
   screenPointToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } | null
   getWorldPosition(id: NodeId): Vec3
+  /** ワンショット音声 (アセット名 or ID)。nodeId 指定でその位置から3D再生 */
+  playSound(assetRef: string, volume: number, nodeId: NodeId | null): void
 }
 
 export interface GameInput {
@@ -88,6 +90,8 @@ export interface ScriptCtx {
     /** GLBのAnimationClipを切替 (crossfade)。null で停止 */
     play(clipName: string | null, fadeSeconds?: number): void
   }
+  /** AudioSource.PlayOneShot相当: 自ノード位置から3Dワンショット再生 (アセット名でも可) */
+  playSound(assetNameOrId: string, volume?: number): void
 }
 
 /* ---------------------------------- Node/Vec プロキシ ---------------------------------- */
@@ -422,6 +426,9 @@ export class ScriptRuntime {
         play(clipName, fadeSeconds = 0.25) {
           self.bridge.playAnimation(id, clipName, fadeSeconds)
         },
+      },
+      playSound(assetNameOrId: string, volume = 1) {
+        self.bridge.playSound(assetNameOrId, volume, id)
       },
     }
   }

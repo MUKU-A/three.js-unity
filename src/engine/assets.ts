@@ -47,6 +47,7 @@ function detectType(name: string): AssetType | null {
   if (/\.fbx$/i.test(name)) return 'fbx'
   if (/\.obj$/i.test(name)) return 'obj'
   if (/\.prefab$/i.test(name)) return 'prefab'
+  if (/\.(mp3|wav|ogg|m4a)$/i.test(name)) return 'audio'
   if (/\.(png|jpe?g|webp|bmp|gif)$/i.test(name)) return 'texture'
   return null
 }

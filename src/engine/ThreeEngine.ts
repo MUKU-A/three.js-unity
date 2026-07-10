@@ -17,6 +17,7 @@ import { createIconSprite, createPickProxy, type IconKind } from './icons'
 import { createContainer, DEG2RAD, disposeObject, RAD2DEG, updateContainer, type NodeContainer } from './objectFactory'
 import { ScriptRuntime } from './scripting'
 import { ensureRapier, PhysicsWorld } from './physics'
+import { AudioManager } from './audio'
 
 /* UNITY_UI_RESEARCH.md §2 のギズモ軸色 / 選択色 */
 const AXIS_X = '#DB3E1D'
@@ -108,8 +109,18 @@ class ThreeEngine {
         const v = this.objectMap.get(id)?.getWorldPosition(new THREE.Vector3())
         return v ? { x: v.x, y: v.y, z: v.z } : { x: 0, y: 0, z: 0 }
       },
+      playSound: (assetRef, volume, nodeId) => {
+        const st = useEditorStore.getState()
+        const asset = st.assets.find((a) => a.type === 'audio' && (a.id === assetRef || a.name === assetRef))
+        if (!asset) {
+          st.log('warn', `playSound: audio asset '${assetRef}' not found`)
+          return
+        }
+        void this.audioManager.playOneShot(asset.id, volume, nodeId ? this.objectMap.get(nodeId) : null)
+      },
     },
   )
+  private readonly audioManager = new AudioManager()
   private physicsWorld = new PhysicsWorld()
   private physicsPending = false
   private fixedAcc = 0
@@ -349,6 +360,7 @@ class ThreeEngine {
     if (!prev || s.scene.nodes !== this.prevSceneRef) {
       this.reconcileNodes(s)
       this.prevSceneRef = s.scene.nodes
+      if (s.mode !== 'edit') this.audioManager.applyChanges(s.scene.nodes) // volume等のlive反映
     }
     if (!prev || s.selection !== prev.selection || s.scene.nodes !== prev.scene.nodes || s.tool !== prev.tool || s.transformSpace !== prev.transformSpace || s.mode !== prev.mode) {
       this.syncInteractionState(s)
@@ -638,11 +650,19 @@ class ThreeEngine {
 
   private syncPlayMode(s: EditorState, prevMode: EditorState['mode']) {
     if (s.mode === 'play') this.clock.start()
+    if (s.mode === 'paused' && prevMode === 'play') this.audioManager.suspend()
+    if (s.mode === 'play' && prevMode === 'paused') this.audioManager.resume()
     if (prevMode === 'edit' && s.mode === 'play') {
-      /* ▶ 開始: スクリプト起動 + 物理ワールド構築 (Rapier WASMは初回のみ遅延ロード) */
+      /* ▶ 開始: スクリプト起動 + 物理ワールド構築 (Rapier WASMは初回のみ遅延ロード) + オーディオ */
       this.gameKeys.clear()
       this.gameKeysDown.clear()
       this.fixedAcc = 0
+      this.audioManager.attachListener(this.findGameCamera(s) ?? this.camera)
+      this.audioManager.start(
+        s.scene.nodes,
+        (id) => this.objectMap.get(id),
+        (lv, msg) => useEditorStore.getState().log(lv, msg),
+      )
       this.scriptRuntime.start()
       this.physicsPending = true
       void ensureRapier()
@@ -665,6 +685,7 @@ class ThreeEngine {
       this.scriptRuntime.stop()
       this.physicsWorld.dispose()
       this.physicsPending = false
+      this.audioManager.stopAll()
     }
   }
 

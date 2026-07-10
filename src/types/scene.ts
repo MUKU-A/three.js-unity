@@ -146,6 +146,38 @@ export interface ColliderComponent {
   isTrigger?: boolean
 }
 
+/**
+ * AudioSource (D-032)。AudioListenerはUnityのデフォルト構成同様、
+ * アクティブなGameカメラへ自動付帯するため専用コンポーネントは持たない。
+ */
+export interface AudioSourceComponent {
+  type: 'audiosource'
+  enabled?: boolean
+  /** audio アセット参照 */
+  assetId?: string | null
+  /** 0..1 */
+  volume: number
+  loop: boolean
+  playOnAwake: boolean
+  /** true = 3D空間減衰 (PositionalAudio) / false = 2D */
+  spatial: boolean
+  /** spatial時: 減衰開始距離 / 最大距離 */
+  minDistance: number
+  maxDistance: number
+}
+
+export const defaultAudioSource = (): AudioSourceComponent => ({
+  type: 'audiosource',
+  enabled: true,
+  assetId: null,
+  volume: 1,
+  loop: false,
+  playOnAwake: true,
+  spatial: true,
+  minDistance: 1,
+  maxDistance: 30,
+})
+
 export type Component =
   | MeshComponent
   | MaterialComponent
@@ -154,6 +186,7 @@ export type Component =
   | ScriptComponent
   | RigidbodyComponent
   | ColliderComponent
+  | AudioSourceComponent
 export type ComponentType = Component['type']
 
 /* ---------------------------------- Node / Scene ---------------------------------- */
@@ -179,7 +212,7 @@ export interface SceneGraph {
 
 /* ---------------------------------- Assets ---------------------------------- */
 
-export type AssetType = 'glb' | 'texture' | 'fbx' | 'obj' | 'prefab'
+export type AssetType = 'glb' | 'texture' | 'fbx' | 'obj' | 'prefab' | 'audio'
 
 /** ストアに置くメタデータ。バイナリ本体は engine/assetRegistry が保持 */
 export interface AssetMeta {

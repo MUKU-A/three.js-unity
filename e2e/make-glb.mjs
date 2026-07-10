@@ -54,6 +54,29 @@ console.log('wrote test-anim.glb', ab2.byteLength, 'bytes')
 writeFileSync(new URL('./out/test-tri.obj', import.meta.url).pathname, 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n')
 console.log('wrote test-tri.obj')
 
+/* WAV (0.4秒 440Hz サイン波, 22050Hz 16bit mono) */
+{
+  const sr = 22050
+  const n = Math.floor(sr * 0.4)
+  const data = Buffer.alloc(n * 2)
+  for (let i = 0; i < n; i++) data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / sr) * 12000), i * 2)
+  const h = Buffer.alloc(44)
+  h.write('RIFF', 0)
+  h.writeUInt32LE(36 + data.length, 4)
+  h.write('WAVEfmt ', 8)
+  h.writeUInt32LE(16, 16)
+  h.writeUInt16LE(1, 20) // PCM
+  h.writeUInt16LE(1, 22) // mono
+  h.writeUInt32LE(sr, 24)
+  h.writeUInt32LE(sr * 2, 28)
+  h.writeUInt16LE(2, 32)
+  h.writeUInt16LE(16, 34)
+  h.write('data', 36)
+  h.writeUInt32LE(data.length, 40)
+  writeFileSync(new URL('./out/test-tone.wav', import.meta.url).pathname, Buffer.concat([h, data]))
+  console.log('wrote test-tone.wav', 44 + data.length, 'bytes')
+}
+
 /* テスト用テクスチャPNG (8x8 チェッカー) も生成 */
 const png = Buffer.from(
   // 最小PNG: zlib非圧縮の8x8白黒チェッカーを事前生成済みbase64で埋め込み
