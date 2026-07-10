@@ -33,6 +33,27 @@ const ab = await exporter.parseAsync(scene, { binary: true })
 writeFileSync(new URL('./out/test-model.glb', import.meta.url).pathname, Buffer.from(ab))
 console.log('wrote test-model.glb', ab.byteLength, 'bytes')
 
+/* アニメーションClip付きGLB (spin / bob の2クリップ) */
+const q0 = new THREE.Quaternion()
+const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI)
+const spin = new THREE.AnimationClip('spin', 2, [
+  new THREE.QuaternionKeyframeTrack('.quaternion', [0, 1, 2], [...q0.toArray(), ...q1.toArray(), ...q0.toArray()]),
+])
+const bob = new THREE.AnimationClip('bob', 1, [
+  new THREE.VectorKeyframeTrack('.position', [0, 0.5, 1], [0, 0, 0, 0, 1, 0, 0, 0, 0]),
+])
+const animScene = new THREE.Scene()
+const animMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xff8800 }))
+animMesh.name = 'AnimBox'
+animScene.add(animMesh)
+const ab2 = await exporter.parseAsync(animScene, { binary: true, animations: [spin, bob] })
+writeFileSync(new URL('./out/test-anim.glb', import.meta.url).pathname, Buffer.from(ab2))
+console.log('wrote test-anim.glb', ab2.byteLength, 'bytes')
+
+/* OBJ (三角形1枚) */
+writeFileSync(new URL('./out/test-tri.obj', import.meta.url).pathname, 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n')
+console.log('wrote test-tri.obj')
+
 /* テスト用テクスチャPNG (8x8 チェッカー) も生成 */
 const png = Buffer.from(
   // 最小PNG: zlib非圧縮の8x8白黒チェッカーを事前生成済みbase64で埋め込み

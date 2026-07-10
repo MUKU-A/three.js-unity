@@ -120,8 +120,8 @@ function assignMap(mat: THREE.MeshStandardMaterial, slot: 'map' | 'normalMap', a
 function buildMeshPart(comp: MeshComponent): THREE.Object3D {
   if (comp.assetId) {
     const asset = getAsset(comp.assetId)
-    if (asset?.gltf) {
-      const inst = skeletonClone(asset.gltf.scene)
+    if (asset?.model) {
+      const inst = skeletonClone(asset.model.scene)
       inst.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
           o.castShadow = comp.castShadow
@@ -289,7 +289,7 @@ export function updateContainer(container: NodeContainer, node: SceneNode, prev:
         container.remove(parts.mesh)
       }
       parts.mesh = buildMeshPart(meshComp)
-      parts.animations = meshComp.assetId ? (getAsset(meshComp.assetId)?.gltf?.animations ?? []) : undefined
+      parts.animations = meshComp.assetId ? (getAsset(meshComp.assetId)?.model?.animations ?? []) : undefined
       container.add(parts.mesh)
     } else if (parts.mesh) {
       parts.mesh.traverse((o) => {

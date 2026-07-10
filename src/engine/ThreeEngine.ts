@@ -10,8 +10,9 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import type { EditorState } from '../store/editorStore'
 import { activeNodeId, cmdAddObject, cmdPatchComponent, cmdPatchNode, makeGlbNode, useEditorStore } from '../store/editorStore'
 import type { NodeId, SceneNode, Transform } from '../types/scene'
-import { getComponent } from '../types/scene'
-import { getAsset } from './assets'
+import { collectSubtreeIds, getComponent } from '../types/scene'
+import { cloneSubtree } from '../store/sceneOps'
+import { getAsset, isModelType } from './assets'
 import { createIconSprite, createPickProxy, type IconKind } from './icons'
 import { createContainer, DEG2RAD, disposeObject, RAD2DEG, updateContainer, type NodeContainer } from './objectFactory'
 import { ScriptRuntime } from './scripting'
@@ -58,7 +59,10 @@ class ThreeEngine {
   private hemi: THREE.HemisphereLight
 
   private readonly clock = new THREE.Clock()
-  private readonly mixers = new Map<NodeId, THREE.AnimationMixer>()
+  private readonly mixers = new Map<
+    NodeId,
+    { mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; current: THREE.AnimationAction | null }
+  >()
 
   private dragBefore: Transform | null = null
   private focusAnim: { fromPos: THREE.Vector3; toPos: THREE.Vector3; fromTgt: THREE.Vector3; toTgt: THREE.Vector3; t: number } | null = null
@@ -80,15 +84,24 @@ class ThreeEngine {
   /* --- 矩形選択 (D-021) --- */
   private band: { startX: number; startY: number; el: HTMLDivElement; active: boolean; additive: boolean } | null = null
 
-  /* --- スクリプト/物理ランタイム (D-025/D-026) --- */
+  /* --- スクリプト/物理ランタイム (D-025/D-026/D-028) --- */
   private readonly gameKeys = new Set<string>()
   private readonly gameKeysDown = new Set<string>()
-  private readonly scriptRuntime = new ScriptRuntime({
-    getKey: (k) => this.gameKeys.has(k.toLowerCase()),
-    getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
-  })
+  private readonly scriptRuntime = new ScriptRuntime(
+    {
+      getKey: (k) => this.gameKeys.has(k.toLowerCase()),
+      getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
+    },
+    {
+      raycast: (origin, dir, maxDistance) => this.physicsWorld.raycast(origin, dir, maxDistance),
+      instantiateNode: (sourceId, position) => this.instantiateNode(sourceId, position),
+      destroyNode: (id) => this.destroyNode(id),
+      playAnimation: (nodeId, clipName, fade) => this.playAnimation(nodeId, clipName, fade),
+    },
+  )
   private physicsWorld = new PhysicsWorld()
   private physicsPending = false
+  private fixedAcc = 0
   private colliderHelper: THREE.LineSegments | null = null
 
   constructor() {
@@ -401,11 +414,81 @@ class ThreeEngine {
     this.mixers.delete(id)
     const clips = obj.userData.parts.animations
     const meshRoot = obj.userData.parts.mesh
-    if (clips && clips.length > 0 && meshRoot) {
-      const mixer = new THREE.AnimationMixer(meshRoot)
-      clips.forEach((c) => mixer.clipAction(c).play())
-      this.mixers.set(id, mixer)
+    if (!clips || clips.length === 0 || !meshRoot) return
+    const mixer = new THREE.AnimationMixer(meshRoot)
+    const actions = new Map(clips.map((c) => [c.name, mixer.clipAction(c)]))
+    /* mesh.animationClip: undefined=全再生(旧互換) / null=なし / 名前=そのClip (D-028) */
+    const node = useEditorStore.getState().scene.nodes[id]
+    const meshComp = node ? getComponent(node, 'mesh') : undefined
+    const sel = meshComp?.animationClip
+    let current: THREE.AnimationAction | null = null
+    if (sel === undefined) {
+      actions.forEach((a) => a.play())
+    } else if (sel !== null) {
+      const a = actions.get(sel)
+      if (a) {
+        a.play()
+        current = a
+      }
     }
+    this.mixers.set(id, { mixer, actions, current })
+  }
+
+  /** スクリプトAPI: AnimationClip の crossfade 切替 (ctx.animation.play) */
+  private playAnimation(nodeId: NodeId, clipName: string | null, fade: number) {
+    const e = this.mixers.get(nodeId)
+    if (!e) return
+    if (clipName === null) {
+      e.actions.forEach((a) => a.fadeOut(fade))
+      e.current = null
+      return
+    }
+    const next = e.actions.get(clipName)
+    if (!next) {
+      useEditorStore.getState().log('warn', `animation.play: clip '${clipName}' not found`)
+      return
+    }
+    next.enabled = true
+    next.reset()
+    if (e.current && e.current !== next) {
+      next.play()
+      e.current.crossFadeTo(next, fade, false)
+    } else {
+      next.fadeIn(fade).play()
+    }
+    e.current = next
+  }
+
+  /** スクリプトAPI: サブツリー複製の動的生成 (ctx.instantiate)。履歴に載せない */
+  private instantiateNode(sourceId: NodeId, position?: { x: number; y: number; z: number }): NodeId | null {
+    const state = useEditorStore.getState()
+    const clone = cloneSubtree(state.scene, sourceId)
+    if (!clone) return null
+    if (position) {
+      clone.nodes[0] = {
+        ...clone.nodes[0],
+        transform: { ...clone.nodes[0].transform, position: { ...position } },
+      }
+    }
+    state.transientAddSubtree(clone.nodes, null) // 購読は同期発火 → objectMap は構築済み
+    const nodes = useEditorStore.getState().scene.nodes
+    if (this.physicsWorld.active) {
+      for (const nid of collectSubtreeIds(nodes, clone.rootId)) {
+        this.physicsWorld.addNode(nodes[nid], this.objectMap.get(nid), (lv, msg) => useEditorStore.getState().log(lv, msg))
+      }
+    }
+    this.scriptRuntime.addInstancesForSubtree(clone.rootId)
+    return clone.rootId
+  }
+
+  /** スクリプトAPI: ノード破棄 (ctx.destroy)。onDestroy配送 → 物理除去 → ストア除去 */
+  private destroyNode(id: NodeId) {
+    const state = useEditorStore.getState()
+    if (!state.scene.nodes[id]) return
+    const ids = new Set(collectSubtreeIds(state.scene.nodes, id))
+    this.scriptRuntime.removeInstancesFor(ids)
+    for (const nid of ids) this.physicsWorld.removeNode(nid)
+    state.transientRemoveSubtree(id)
   }
 
   /* ---------------------------------- 選択・ギズモ・ヘルパー ---------------------------------- */
@@ -513,6 +596,7 @@ class ThreeEngine {
       /* ▶ 開始: スクリプト起動 + 物理ワールド構築 (Rapier WASMは初回のみ遅延ロード) */
       this.gameKeys.clear()
       this.gameKeysDown.clear()
+      this.fixedAcc = 0
       this.scriptRuntime.start()
       this.physicsPending = true
       void ensureRapier()
@@ -808,7 +892,7 @@ class ThreeEngine {
       const st = useEditorStore.getState()
       const point = this.dropPoint(e)
 
-      if (asset.meta.type === 'glb') {
+      if (isModelType(asset.meta.type)) {
         const node = makeGlbNode(assetId, asset.meta.name)
         node.transform.position = { x: round3(point.x), y: round3(point.y), z: round3(point.z) }
         st.execute(cmdAddObject([node], null))
@@ -920,16 +1004,24 @@ class ThreeEngine {
     const dt = this.clock.getDelta()
 
     if (st.mode === 'play') {
-      for (const mixer of this.mixers.values()) mixer.update(dt)
-      /* スクリプト → 物理 の順 (kinematicボディへスクリプトの移動を反映してからステップ) */
+      for (const e of this.mixers.values()) e.mixer.update(dt)
+      /* Unityの実行順: Update → (固定ステップ: FixedUpdate → 物理+イベント) → LateUpdate */
       this.scriptRuntime.update(dt)
-      if (this.physicsWorld.active) {
-        this.physicsWorld.step(
-          dt,
-          (id) => this.objectMap.get(id),
-          (id, worldPos, worldQuat) => this.writeWorldTransform(id, worldPos, worldQuat),
-        )
+      const FIXED = 1 / 50
+      this.fixedAcc = Math.min(this.fixedAcc + dt, 0.2) // スパイラル防止
+      while (this.fixedAcc >= FIXED) {
+        this.fixedAcc -= FIXED
+        this.scriptRuntime.fixedUpdate(FIXED)
+        if (this.physicsWorld.active) {
+          const events = this.physicsWorld.step(
+            FIXED,
+            (id) => this.objectMap.get(id),
+            (id, worldPos, worldQuat) => this.writeWorldTransform(id, worldPos, worldQuat),
+          )
+          if (events.length > 0) this.scriptRuntime.dispatchCollisions(events)
+        }
       }
+      this.scriptRuntime.lateUpdate(dt)
       this.gameKeysDown.clear()
     }
 

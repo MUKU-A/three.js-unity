@@ -43,8 +43,13 @@ export interface MeshComponent {
   type: 'mesh'
   /** プリミティブ種別。assetId 指定時は無視される */
   geometry: PrimitiveKind
-  /** GLBアセット参照 (Projectパネルからのインポート品) */
+  /** GLB/FBX/OBJアセット参照 (Projectパネルからのインポート品) */
   assetId?: string | null
+  /**
+   * 再生時のアニメーション: undefined=全Clip同時 (旧互換) / null=再生しない / 名前=そのClipのみ。
+   * スクリプトから ctx.animation.play(name) で切替可能 (D-028)
+   */
+  animationClip?: string | null
   castShadow: boolean
   receiveShadow: boolean
 }
@@ -137,6 +142,8 @@ export interface ColliderComponent {
   /** 反発係数 0..1 */
   bounciness: number
   friction: number
+  /** Unityの Is Trigger: 衝突せず侵入イベントのみ発火 (onTriggerEnter/Exit) */
+  isTrigger?: boolean
 }
 
 export type Component =
@@ -170,7 +177,7 @@ export interface SceneGraph {
 
 /* ---------------------------------- Assets ---------------------------------- */
 
-export type AssetType = 'glb' | 'texture'
+export type AssetType = 'glb' | 'texture' | 'fbx' | 'obj'
 
 /** ストアに置くメタデータ。バイナリ本体は engine/assetRegistry が保持 */
 export interface AssetMeta {
@@ -214,7 +221,12 @@ export const defaultMaterial = (): MaterialComponent => ({
   wireframe: false,
 })
 
-export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。onStart / onUpdate を定義します。
+export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。使えるフック:
+//   onStart(ctx) / onUpdate(ctx, dt) / onFixedUpdate(ctx, dt) / onLateUpdate(ctx, dt) / onDestroy(ctx)
+//   onCollisionEnter/Exit(ctx, other) / onTriggerEnter/Exit(ctx, other)
+// ctx API: node.position|rotation|scale / find(name) / instantiate(src, pos) / destroy(target?)
+//          physics.raycast(origin, dir, maxDist) / startCoroutine(function*(){ yield 秒 })
+//          animation.play(clipName, fade) / input.getKey|getKeyDown / time.elapsed|delta / log(msg)
 // const props = {...} で宣言した値は Inspector から編集できます。
 const props = {
   speed: 90,

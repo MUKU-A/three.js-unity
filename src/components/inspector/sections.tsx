@@ -166,6 +166,13 @@ export function MeshSection({ node, comp, index }: { node: SceneNode; comp: Mesh
   const [open, setOpen] = useState(true)
   const { key } = useComponentCommit(node.id, index)
   const assetName = comp.assetId ? (getAsset(comp.assetId)?.meta.name ?? '(missing asset)') : null
+  const clips = comp.assetId ? (getAsset(comp.assetId)?.model?.animations ?? []) : []
+  /* animationClip: undefined=All(旧互換) / null=None / 名前 (D-028) */
+  const animValue = comp.animationClip === undefined ? '__all__' : comp.animationClip === null ? '__none__' : comp.animationClip
+  const commitAnim = (after: string) => {
+    const mapped = after === '__all__' ? undefined : after === '__none__' ? null : after
+    key<'animationClip', string | null | undefined>('animationClip', 'Set Animation').onCommit(comp.animationClip, mapped)
+  }
 
   return (
     <div>
@@ -187,6 +194,18 @@ export function MeshSection({ node, comp, index }: { node: SceneNode; comp: Mesh
             </FieldRow>
           ) : (
             <SelectRow label="Mesh" value={comp.geometry} options={GEOMETRIES} onCommit={(b, a) => key<'geometry', PrimitiveKind>('geometry', 'Change Mesh').onCommit(b, a)} />
+          )}
+          {clips.length > 0 && (
+            <SelectRow
+              label="Animation"
+              value={animValue}
+              options={[
+                { value: '__all__', label: 'All Clips' },
+                { value: '__none__', label: 'None' },
+                ...clips.map((c) => ({ value: c.name, label: c.name })),
+              ]}
+              onCommit={(_b, a) => commitAnim(a)}
+            />
           )}
           <CheckboxRow label="Cast Shadows" value={comp.castShadow} onCommit={(b, a) => key<'castShadow', boolean>('castShadow').onCommit(b, a)} />
           <CheckboxRow label="Receive Shadows" value={comp.receiveShadow} onCommit={(b, a) => key<'receiveShadow', boolean>('receiveShadow').onCommit(b, a)} />

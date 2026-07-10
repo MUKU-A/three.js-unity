@@ -1,13 +1,16 @@
 /**
- * スクリプトランタイム (MonoBehaviour相当, D-025)。
- * ユーザーコードは onStart(ctx) / onUpdate(ctx, dt) を定義し、const props = {...} で
- * Inspectorに露出するプロパティを宣言する。実行は再生モード中のみ。
+ * スクリプトランタイム (MonoBehaviour相当, D-025/D-028)。
+ * ライフサイクル: onStart / onUpdate / onFixedUpdate / onLateUpdate / onDestroy /
+ *                 onCollisionEnter・Exit / onTriggerEnter・Exit
+ * ctx API: node / props / time / input / find / log /
+ *          instantiate / destroy / physics.raycast / startCoroutine / animation
  *
  * Transformへの書き込みはストアの transient 経由 (SSoT一方向フロー維持)。
- * 再生中の変更は停止時にスナップショットから完全復元される (D-006)。
+ * 再生中の変更 (動的生成含む) は停止時にスナップショットから完全復元される (D-006)。
  */
 import type { NodeId, ScriptComponent, Transform, Vec3 } from '../types/scene'
 import { useEditorStore } from '../store/editorStore'
+import type { RaycastHit } from './physics'
 
 /* ---------------------------------- 公開API (ctx) ---------------------------------- */
 
@@ -27,6 +30,15 @@ export interface NodeProxy {
   visible: boolean
 }
 
+/** エンジンがランタイムへ提供する機能 (物理・動的生成・アニメーション) */
+export interface EngineBridge {
+  raycast(origin: Vec3, dir: Vec3, maxDistance?: number): RaycastHit | null
+  /** サブツリー複製を動的生成し、新ルートIDを返す */
+  instantiateNode(sourceId: NodeId, position?: Vec3): NodeId | null
+  destroyNode(id: NodeId): void
+  playAnimation(nodeId: NodeId, clipName: string | null, fadeSeconds: number): void
+}
+
 export interface ScriptCtx {
   node: NodeProxy
   props: Record<string, number | string | boolean>
@@ -34,6 +46,23 @@ export interface ScriptCtx {
   input: { getKey(key: string): boolean; getKeyDown(key: string): boolean }
   find(name: string): NodeProxy | null
   log(message: unknown): void
+  /** Unityの Instantiate: 既存ノード(名前 or proxy)を複製して配置。返り値は新ノードのproxy */
+  instantiate(source: NodeProxy | string, position?: { x: number; y: number; z: number }): NodeProxy | null
+  /** Unityの Destroy: ノードをシーンから除去 (onDestroy が呼ばれる) */
+  destroy(target?: NodeProxy | string): void
+  physics: {
+    raycast(
+      origin: { x: number; y: number; z: number },
+      dir: { x: number; y: number; z: number },
+      maxDistance?: number,
+    ): { node: NodeProxy; distance: number; point: { x: number; y: number; z: number } } | null
+  }
+  /** コルーチン: function* を渡し、yield 秒数 で待機 (yield 0.5 → 0.5秒待つ) */
+  startCoroutine(gen: Generator | (() => Generator)): void
+  animation: {
+    /** GLBのAnimationClipを切替 (crossfade)。null で停止 */
+    play(clipName: string | null, fadeSeconds?: number): void
+  }
 }
 
 /* ---------------------------------- Node/Vec プロキシ ---------------------------------- */
@@ -94,17 +123,37 @@ export function makeNodeProxy(id: NodeId): NodeProxy {
 
 /* ---------------------------------- コンパイル ---------------------------------- */
 
+type Hook<A extends unknown[]> = ((...args: A) => void) | null
+
 export interface CompiledScript {
-  onStart: ((ctx: ScriptCtx) => void) | null
-  onUpdate: ((ctx: ScriptCtx, dt: number) => void) | null
+  onStart: Hook<[ScriptCtx]>
+  onUpdate: Hook<[ScriptCtx, number]>
+  onFixedUpdate: Hook<[ScriptCtx, number]>
+  onLateUpdate: Hook<[ScriptCtx, number]>
+  onDestroy: Hook<[ScriptCtx]>
+  onCollisionEnter: Hook<[ScriptCtx, NodeProxy]>
+  onCollisionExit: Hook<[ScriptCtx, NodeProxy]>
+  onTriggerEnter: Hook<[ScriptCtx, NodeProxy]>
+  onTriggerExit: Hook<[ScriptCtx, NodeProxy]>
   props: Record<string, number | string | boolean> | null
 }
 
+const HOOK_NAMES = [
+  'onStart',
+  'onUpdate',
+  'onFixedUpdate',
+  'onLateUpdate',
+  'onDestroy',
+  'onCollisionEnter',
+  'onCollisionExit',
+  'onTriggerEnter',
+  'onTriggerExit',
+] as const
+
 /** ユーザーコードを評価して hooks と props 宣言を取り出す。失敗時は Error を投げる */
 export function compileScript(code: string): CompiledScript {
-  const factory = new Function(
-    `"use strict";\n${code}\n;return {\n  onStart: typeof onStart === 'function' ? onStart : null,\n  onUpdate: typeof onUpdate === 'function' ? onUpdate : null,\n  props: typeof props !== 'undefined' ? props : null,\n};`,
-  )
+  const ret = HOOK_NAMES.map((h) => `${h}: typeof ${h} === 'function' ? ${h} : null`).join(',\n  ')
+  const factory = new Function(`"use strict";\n${code}\n;return {\n  ${ret},\n  props: typeof props !== 'undefined' ? props : null,\n};`)
   return factory() as CompiledScript
 }
 
@@ -131,77 +180,165 @@ interface ScriptInstance {
   scriptName: string
   hooks: CompiledScript
   ctx: ScriptCtx
-  /** 実行時エラーで停止済み (Unityのコンソールエラー相当。スパム防止に1回で無効化) */
   dead: boolean
+}
+
+interface Coroutine {
+  gen: Generator
+  wait: number
+  scriptName: string
 }
 
 export class ScriptRuntime {
   private instances: ScriptInstance[] = []
+  private coroutines: Coroutine[] = []
   private elapsed = 0
   private input: { getKey(k: string): boolean; getKeyDown(k: string): boolean }
+  private bridge: EngineBridge
+  private proxyCache = new Map<NodeId, NodeProxy>()
 
-  constructor(input: { getKey(k: string): boolean; getKeyDown(k: string): boolean }) {
+  constructor(input: { getKey(k: string): boolean; getKeyDown(k: string): boolean }, bridge: EngineBridge) {
     this.input = input
+    this.bridge = bridge
   }
 
   get running(): boolean {
     return this.instances.length > 0
   }
 
+  private proxyFor(id: NodeId): NodeProxy {
+    let p = this.proxyCache.get(id)
+    if (!p) {
+      p = makeNodeProxy(id)
+      this.proxyCache.set(id, p)
+    }
+    return p
+  }
+
   start() {
     this.stop()
     this.elapsed = 0
     const state = st()
-    const proxyCache = new Map<NodeId, NodeProxy>()
-    const proxyFor = (id: NodeId) => {
-      let p = proxyCache.get(id)
-      if (!p) {
-        p = makeNodeProxy(id)
-        proxyCache.set(id, p)
-      }
-      return p
-    }
-
+    let started = 0
     for (const id in state.scene.nodes) {
-      const node = state.scene.nodes[id]
-      node.components.forEach((comp, componentIndex) => {
-        if (comp.type !== 'script' || comp.enabled === false) return
-        const sc = comp as ScriptComponent
-        let hooks: CompiledScript
-        try {
-          hooks = compileScript(sc.code)
-        } catch (err) {
-          state.log('error', `[${sc.name}] Compile error on '${node.name}': ${String(err)}`)
-          return
-        }
-        const self = this
-        const ctx: ScriptCtx = {
-          node: proxyFor(id),
-          get props() {
-            const c = st().scene.nodes[id]?.components[componentIndex]
-            return c && c.type === 'script' ? c.props : {}
-          },
-          time: {
-            get elapsed() {
-              return self.elapsed
-            },
-            delta: 0,
-          },
-          input: this.input,
-          find(name: string) {
-            const found = Object.values(st().scene.nodes).find((n) => n.name === name)
-            return found ? proxyFor(found.id) : null
-          },
-          log(message: unknown) {
-            st().log('info', `[${sc.name}] ${typeof message === 'object' ? JSON.stringify(message) : String(message)}`)
-          },
-        }
-        this.instances.push({ nodeId: id, componentIndex, scriptName: sc.name, hooks, ctx, dead: false })
-      })
+      started += this.createInstancesForNode(id, false)
     }
+    for (const inst of this.instances) this.safeCall(inst, 'onStart')
+    if (started > 0) state.log('info', `${started} script(s) started`)
+  }
 
-    for (const inst of this.instances) this.safeCall(inst, 'onStart', 0)
-    if (this.instances.length > 0) state.log('info', `${this.instances.length} script(s) started`)
+  /** Instantiate されたサブツリーのスクリプトを起動 (onStartも即時呼ぶ) */
+  addInstancesForSubtree(rootId: NodeId) {
+    const nodes = st().scene.nodes
+    const ids: NodeId[] = []
+    const walk = (id: NodeId) => {
+      if (!nodes[id]) return
+      ids.push(id)
+      nodes[id].childrenIds.forEach(walk)
+    }
+    walk(rootId)
+    const created: ScriptInstance[] = []
+    for (const id of ids) {
+      const before = this.instances.length
+      this.createInstancesForNode(id, true)
+      created.push(...this.instances.slice(before))
+    }
+    for (const inst of created) this.safeCall(inst, 'onStart')
+  }
+
+  /** Destroy されたノード群のスクリプトへ onDestroy を配送して除去 */
+  removeInstancesFor(ids: Set<NodeId>) {
+    for (const inst of this.instances) {
+      if (ids.has(inst.nodeId)) this.safeCall(inst, 'onDestroy')
+    }
+    this.instances = this.instances.filter((i) => !ids.has(i.nodeId))
+  }
+
+  private createInstancesForNode(id: NodeId, quiet: boolean): number {
+    const state = st()
+    const node = state.scene.nodes[id]
+    if (!node) return 0
+    let count = 0
+    node.components.forEach((comp, componentIndex) => {
+      if (comp.type !== 'script' || comp.enabled === false) return
+      const sc = comp as ScriptComponent
+      let hooks: CompiledScript
+      try {
+        hooks = compileScript(sc.code)
+      } catch (err) {
+        if (!quiet) state.log('error', `[${sc.name}] Compile error on '${node.name}': ${String(err)}`)
+        return
+      }
+      this.instances.push({
+        nodeId: id,
+        componentIndex,
+        scriptName: sc.name,
+        hooks,
+        ctx: this.makeCtx(id, componentIndex, sc.name),
+        dead: false,
+      })
+      count++
+    })
+    return count
+  }
+
+  private makeCtx(id: NodeId, componentIndex: number, scriptName: string): ScriptCtx {
+    const self = this
+    return {
+      node: this.proxyFor(id),
+      get props() {
+        const c = st().scene.nodes[id]?.components[componentIndex]
+        return c && c.type === 'script' ? c.props : {}
+      },
+      time: {
+        get elapsed() {
+          return self.elapsed
+        },
+        delta: 0,
+      },
+      input: this.input,
+      find(name: string) {
+        const found = Object.values(st().scene.nodes).find((n) => n.name === name)
+        return found ? self.proxyFor(found.id) : null
+      },
+      log(message: unknown) {
+        st().log('info', `[${scriptName}] ${typeof message === 'object' ? JSON.stringify(message) : String(message)}`)
+      },
+      instantiate(source, position) {
+        const sourceId = typeof source === 'string' ? Object.values(st().scene.nodes).find((n) => n.name === source)?.id : source.id
+        if (!sourceId) return null
+        const newId = self.bridge.instantiateNode(sourceId, position ? { x: position.x, y: position.y, z: position.z } : undefined)
+        return newId ? self.proxyFor(newId) : null
+      },
+      destroy(target) {
+        const targetId =
+          target === undefined
+            ? id
+            : typeof target === 'string'
+              ? Object.values(st().scene.nodes).find((n) => n.name === target)?.id
+              : target.id
+        if (targetId) self.bridge.destroyNode(targetId)
+      },
+      physics: {
+        raycast(origin, dir, maxDistance = 1000) {
+          const hit = self.bridge.raycast(
+            { x: origin.x, y: origin.y, z: origin.z },
+            { x: dir.x, y: dir.y, z: dir.z },
+            maxDistance,
+          )
+          return hit ? { node: self.proxyFor(hit.nodeId), distance: hit.distance, point: hit.point } : null
+        },
+      },
+      startCoroutine(gen) {
+        const g = typeof gen === 'function' ? gen() : gen
+        self.coroutines.push({ gen: g, wait: 0, scriptName })
+      },
+      animation: {
+        play(clipName, fadeSeconds = 0.25) {
+          self.bridge.playAnimation(id, clipName, fadeSeconds)
+        },
+      },
+    }
   }
 
   update(dt: number) {
@@ -210,18 +347,60 @@ export class ScriptRuntime {
       inst.ctx.time.delta = dt
       this.safeCall(inst, 'onUpdate', dt)
     }
+    /* コルーチン (Update後, Unityと同順)。yield 秒数=待機 / yield 0や値なし=次フレーム */
+    this.coroutines = this.coroutines.filter((co) => {
+      co.wait -= dt
+      if (co.wait > 0) return true
+      try {
+        const r = co.gen.next()
+        if (r.done) return false
+        co.wait = typeof r.value === 'number' && r.value > 0 ? r.value : 0
+        return true
+      } catch (err) {
+        st().log('error', `[${co.scriptName}] coroutine error: ${String(err)}`)
+        return false
+      }
+    })
+  }
+
+  fixedUpdate(fixedDt: number) {
+    for (const inst of this.instances) this.safeCall(inst, 'onFixedUpdate', fixedDt)
+  }
+
+  lateUpdate(dt: number) {
+    for (const inst of this.instances) this.safeCall(inst, 'onLateUpdate', dt)
+  }
+
+  /** 物理イベントをスクリプトへ配送 */
+  dispatchCollisions(events: Array<{ a: NodeId; b: NodeId; started: boolean; trigger: boolean }>) {
+    for (const ev of events) {
+      const hookName = ev.trigger
+        ? ev.started
+          ? ('onTriggerEnter' as const)
+          : ('onTriggerExit' as const)
+        : ev.started
+          ? ('onCollisionEnter' as const)
+          : ('onCollisionExit' as const)
+      for (const inst of this.instances) {
+        if (inst.nodeId === ev.a) this.safeCall(inst, hookName, this.proxyFor(ev.b))
+        else if (inst.nodeId === ev.b) this.safeCall(inst, hookName, this.proxyFor(ev.a))
+      }
+    }
   }
 
   stop() {
+    for (const inst of this.instances) this.safeCall(inst, 'onDestroy')
     this.instances = []
+    this.coroutines = []
+    this.proxyCache.clear()
   }
 
-  private safeCall(inst: ScriptInstance, hook: 'onStart' | 'onUpdate', dt: number) {
+  private safeCall(inst: ScriptInstance, hook: keyof CompiledScript & string, arg?: unknown) {
     if (inst.dead) return
-    const fn = inst.hooks[hook]
+    const fn = inst.hooks[hook as (typeof HOOK_NAMES)[number]]
     if (!fn) return
     try {
-      fn(inst.ctx, dt)
+      ;(fn as (c: ScriptCtx, a?: unknown) => void)(inst.ctx, arg)
     } catch (err) {
       inst.dead = true
       st().log('error', `[${inst.scriptName}] ${hook} error: ${String(err)} — script disabled until next Play`)

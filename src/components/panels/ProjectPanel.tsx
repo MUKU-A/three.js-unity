@@ -61,7 +61,7 @@ export function ProjectPanel() {
           ref={fileRef}
           type="file"
           multiple
-          accept=".glb,.gltf,.png,.jpg,.jpeg,.webp"
+          accept=".glb,.gltf,.fbx,.obj,.png,.jpg,.jpeg,.webp"
           className="hidden"
           onChange={(e) => {
             if (e.target.files) void doImport(e.target.files)
@@ -97,7 +97,7 @@ export function ProjectPanel() {
                   menu.open(e, [
                     {
                       label: 'Add to Scene',
-                      disabled: a.type !== 'glb',
+                      disabled: a.type === 'texture',
                       onClick: () => {
                         st().execute(cmdAddObject([makeGlbNode(a.id, a.name)], null))
                         st().log('info', `Placed '${a.name}' in scene`)

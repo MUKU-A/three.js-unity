@@ -29,13 +29,18 @@ npm run build    # 本番ビルド (tsc + vite)
   **"1+2*3" のような数式入力**にも対応)、Mesh Filter (プリミティブ切替/GLB参照)、
   Material (色 / Base Map / **Normal Map / Tiling / Offset** / Metallic/Roughness/Opacity/Emission)、
   Light / Camera (**ヘッダのenabledチェックボックス**付き)、Add Component (検索付き)
-- **スクリプト (MonoBehaviour相当)**: `onStart(ctx)` / `onUpdate(ctx, dt)` をJSで記述。
-  `const props = {...}` の宣言が **Inspectorに自動でフィールド化**され、値は保存される。
-  ctx API: `node.position/rotation/scale`、`find(name)`、`input.getKey/getKeyDown`、`time`、`log`。
-  内蔵スクリプトエディタ (コンポーネントの「Open Script Editor」) 付き
+- **スクリプト (MonoBehaviour相当)**: `onStart / onUpdate / onFixedUpdate / onLateUpdate / onDestroy /
+  onCollisionEnter・Exit / onTriggerEnter・Exit` をJSで記述。`const props = {...}` の宣言が
+  **Inspectorに自動でフィールド化**され、値は保存される。ctx API:
+  `node.position/rotation/scale`、`find`、**`instantiate` / `destroy`**、**`physics.raycast`**、
+  **`startCoroutine`(generator, `yield 秒`)**、**`animation.play(clip, fade)`**、
+  `input.getKey/getKeyDown`、`time`、`log`。内蔵スクリプトエディタ付き
 - **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰) と Box/Sphere Collider
-  (反発/摩擦/センター/サイズ、選択中は緑ワイヤーフレーム表示)。▶ 再生で落下・衝突し、
-  ⏹ 停止で完全復元。Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
+  (反発/摩擦/センター/サイズ/**Is Trigger**、選択中は緑ワイヤーフレーム表示)。固定50Hzステップ、
+  **衝突/トリガーイベントをスクリプトへ配送**。▶ 再生で落下・衝突し、⏹ 停止で完全復元。
+  Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
+- **アニメーション**: モデルのClipをInspectorで選択 (All/None/Clip名)、スクリプトから
+  crossfade切替。**FBX / OBJ** のインポートにも対応
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play

@@ -136,6 +136,19 @@
   アセットID変更時にマテリアル専用cloneを割り当ててから repeat/offset を設定する
   (Unityの「マテリアル毎のTiling」と同じ独立性)。法線マップはNoColorSpace。
 
+## D-028: ゲームロジックAPI (レビュー第2弾対応)
+- **ライフサイクル**: onFixedUpdate は固定50Hzアキュムレータ (スパイラル防止0.2sクランプ) で
+  物理ステップと同périodで呼ぶ。Update → [FixedUpdate → 物理+イベント]×n → LateUpdate のUnity順。
+- **Instantiate/Destroy**: cloneSubtree + transientAdd/RemoveSubtree (履歴に載せない)。
+  動的生成物には物理ボディ追加とスクリプト起動 (onStart) を即時実施。停止時は
+  スナップショット復元で自然に消滅/復活するため後始末が不要 (D-006の設計が効く)。
+- **衝突イベント**: RapierのEventQueueをdrainし、collider handle→nodeId対応表で
+  onCollision/onTrigger(Enter|Exit) を両ノードのスクリプトへ配送。isTriggerはセンサー化。
+- **コルーチン**: generatorベース。yield 秒数 で待機、Update後に進行 (Unity同順)。
+- **アニメ制御**: mesh.animationClip (undefined=全/null=なし/名前) + crossfade API。
+  Animatorステートマシンは未実装 (ROADMAP P2) だが、スクリプトからの切替で大半のユースを充足。
+- **FBX/OBJ**: three公式ローダーを遅延importし、GLBと同じ ModelAsset 形に正規化して取り込む。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

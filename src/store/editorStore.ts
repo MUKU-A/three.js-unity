@@ -75,6 +75,9 @@ export interface EditorState {
   transientPatchNode(id: NodeId, patch: Partial<SceneNode>): void
   transientPatchComponent(id: NodeId, componentIndex: number, patch: Partial<Component>): void
   transientSetTransform(id: NodeId, transform: Transform): void
+  /** ランタイム動的生成/破棄 (Instantiate/Destroy, 履歴に載せない。停止時にスナップショットで消える) */
+  transientAddSubtree(nodes: SceneNode[], parentId: NodeId | null): void
+  transientRemoveSubtree(id: NodeId): void
 
   /* --- scene全置換 (ロード時) --- */
   replaceScene(scene: SceneGraph, assets: AssetMeta[]): void
@@ -196,6 +199,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   },
   transientSetTransform(id, transform) {
     set((s) => ({ scene: ops.patchNode(s.scene, id, { transform }) }))
+  },
+  transientAddSubtree(nodes, parentId) {
+    set((s) => ({ scene: ops.addSubtree(s.scene, nodes, parentId) }))
+  },
+  transientRemoveSubtree(id) {
+    set((s) => ({
+      scene: ops.removeSubtree(s.scene, id).graph,
+      selection: s.selection.filter((x) => x !== id),
+    }))
   },
 
   replaceScene(scene, assets) {
@@ -589,7 +601,7 @@ export function makeCameraNode(): SceneNode {
 }
 
 export function makeGlbNode(assetId: string, assetName: string): SceneNode {
-  const n = makeEmptyNode(assetName.replace(/\.(glb|gltf)$/i, ''))
+  const n = makeEmptyNode(assetName.replace(/\.(glb|gltf|fbx|obj)$/i, ''))
   n.components = [{ ...defaultMesh('box'), assetId }]
   return n
 }

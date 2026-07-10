@@ -303,6 +303,11 @@ export function ColliderSection({ node, comp, index }: { node: SceneNode; comp: 
           ) : (
             <NumberRow label="Radius" value={comp.radius} {...key<number>('radius')} />
           )}
+          <CheckboxRow
+            label="Is Trigger"
+            value={comp.isTrigger === true}
+            onCommit={(b, a) => key<boolean>('isTrigger', 'Toggle Is Trigger').onCommit(b, a)}
+          />
           <SliderRow label="Bounciness" value={comp.bounciness} {...key<number>('bounciness')} />
           <SliderRow label="Friction" value={comp.friction} min={0} max={2} {...key<number>('friction')} />
         </div>

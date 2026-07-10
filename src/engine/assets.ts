@@ -3,9 +3,15 @@
  * ストアには AssetMeta のみ置き、実体はここで管理する (シリアライズは serialization.ts)。
  */
 import * as THREE from 'three'
-import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { AssetMeta, AssetType } from '../types/scene'
 import { newId } from '../types/scene'
+
+/** GLB/FBX/OBJ 共通のモデルテンプレート (配置時に clone する) */
+export interface ModelAsset {
+  scene: THREE.Group
+  animations: THREE.AnimationClip[]
+}
 
 export interface AssetData {
   meta: AssetMeta
@@ -13,9 +19,11 @@ export interface AssetData {
   /** texture 用 */
   objectUrl?: string
   texture?: THREE.Texture
-  /** glb 用 (テンプレート。配置時に clone する) */
-  gltf?: GLTF
+  /** モデル (glb/fbx/obj) 用 */
+  model?: ModelAsset
 }
+
+export const isModelType = (t: AssetType) => t === 'glb' || t === 'fbx' || t === 'obj'
 
 const registry = new Map<string, AssetData>()
 const gltfLoader = new GLTFLoader()
@@ -36,14 +44,32 @@ export function allAssets(): AssetData[] {
 
 function detectType(name: string): AssetType | null {
   if (/\.(glb|gltf)$/i.test(name)) return 'glb'
+  if (/\.fbx$/i.test(name)) return 'fbx'
+  if (/\.obj$/i.test(name)) return 'obj'
   if (/\.(png|jpe?g|webp|bmp|gif)$/i.test(name)) return 'texture'
   return null
 }
 
-async function parseGlb(buffer: ArrayBuffer): Promise<GLTF> {
-  return new Promise((resolve, reject) => {
-    gltfLoader.parse(buffer.slice(0), '', resolve, reject)
-  })
+async function parseModel(type: AssetType, buffer: ArrayBuffer): Promise<ModelAsset> {
+  if (type === 'glb') {
+    return new Promise((resolve, reject) => {
+      gltfLoader.parse(
+        buffer.slice(0),
+        '',
+        (gltf) => resolve({ scene: gltf.scene, animations: gltf.animations ?? [] }),
+        reject,
+      )
+    })
+  }
+  if (type === 'fbx') {
+    const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js')
+    const group = new FBXLoader().parse(buffer.slice(0), '')
+    return { scene: group, animations: group.animations ?? [] }
+  }
+  /* obj (アニメーションなし) */
+  const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js')
+  const group = new OBJLoader().parse(new TextDecoder().decode(buffer))
+  return { scene: group, animations: [] }
 }
 
 async function loadTexture(buffer: ArrayBuffer, mime: string): Promise<{ texture: THREE.Texture; url: string }> {
@@ -66,8 +92,8 @@ export async function importAsset(name: string, buffer: ArrayBuffer, forcedId?: 
   const meta: AssetMeta = { id, name, type, size: buffer.byteLength }
   const data: AssetData = { meta, buffer }
 
-  if (type === 'glb') {
-    data.gltf = await parseGlb(buffer)
+  if (isModelType(type)) {
+    data.model = await parseModel(type, buffer)
   } else {
     const { texture, url } = await loadTexture(buffer, mimeFor(name))
     data.texture = texture

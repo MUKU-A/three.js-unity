@@ -13,10 +13,18 @@
 
 | 指摘 | 対応 |
 |---|---|
-| 1. カスタムスクリプト (MonoBehaviour相当) | ✅ `ScriptComponent` + `engine/scripting.ts`。onStart/onUpdate、ctx (node/find/input/time/log)、`const props` のInspector自動露出 (D-025) |
-| 1. イベント/入力 | ✅ ctx.input.getKey / getKeyDown (再生中のキーボード)。マウス/EventSystemは未対応 (下記) |
+| 1. カスタムスクリプト (MonoBehaviour相当) | ✅ `ScriptComponent` + `engine/scripting.ts`。ctx (node/find/input/time/log)、`const props` のInspector自動露出 (D-025) |
+| 1. ライフサイクル全般 | ✅ onStart / onUpdate / **onFixedUpdate (固定50Hz) / onLateUpdate / onDestroy** (D-028) |
+| 1. Instantiate / Destroy | ✅ ctx.instantiate(src, pos) / ctx.destroy(target)。物理ボディ・スクリプトも動的に追従、停止で完全復元 (D-028) |
+| 1. 衝突イベント | ✅ onCollisionEnter/Exit・onTriggerEnter/Exit (RapierのEventQueue結線) (D-028) |
+| 1. 物理Raycast | ✅ ctx.physics.raycast(origin, dir, maxDist) → {node, point, distance} (D-028) |
+| 1. コルーチン | ✅ ctx.startCoroutine(function*(){ yield 秒 }) (D-028) |
+| 1. イベント/入力 | ✅ ctx.input.getKey / getKeyDown (再生中のキーボード)。マウスは未対応 (下記) |
 | 7. リフレクション的Inspector生成 | ✅ スクリプトprops宣言 → 型別フィールド自動生成、既存値保持マージ |
 | 2. Rigidbody / Collider / 物理エンジン | ✅ Rapier (WASM遅延ロード)。dynamic/kinematic/静的、Box/Sphereコライダー、質量/反発/摩擦、緑ワイヤーフレームギズモ (D-026) |
+| 4. トリガーコライダー | ✅ Collider.isTrigger (センサー化 + onTrigger系イベント) (D-028) |
+| 3. アニメーションClip制御 | ✅ mesh.animationClip (All/None/Clip名のInspector選択) + ctx.animation.play(name, fade) のcrossfade切替 (D-028) |
+| 3. 対応フォーマット | ✅ GLB/GLTF + **FBX / OBJ** (モデル)、PNG/JPG/WebP (テクスチャ)。オーディオは未対応 (下記) |
 | 3. Normal Map / Tiling / Offset | ✅ MaterialComponentに追加、マテリアル毎テクスチャ複製で共有汚染なし |
 | (前回対応) Gameビュー/メニューバー/Unity操作系 | ✅ D-019〜D-024 |
 
@@ -25,10 +33,12 @@
 ### P1 (次のイテレーション候補)
 - **Prefabシステム**: サブツリーをアセット化し、インスタンスへの変更同期・オーバーライドを管理。
   データモデル案: `assets` に `prefab` 型を追加し、ノードに `prefabId`+`overrides` を持たせる。
-- **ゲーム内Raycast/衝突イベント**: ctx.raycast()、onCollisionEnter (Rapierのイベントキュー結線)。
+  ※ ctx.instantiate は実装済みなので「テンプレのアセット化と同期」だけが残タスク。
+- **オーディオ**: AudioSource/AudioListenerコンポーネント (THREE.PositionalAudio)、.mp3/.wavインポート。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。
 - **マウス入力API**: ctx.input.getMouseButton / mousePosition (Gameビュー座標系)。
+- **ジョイント**: Fixed/Hinge/Spring (Rapierのimpulse joints結線)。
 
 ### P2 (価値は高いが規模が大きい)
 - **AnimatorステートマシンとClip選択**: 現状はGLB全Clipを同時再生。最低限「再生Clipの選択」を
