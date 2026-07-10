@@ -49,6 +49,9 @@ npm run build    # 本番ビルド (tsc + vite)
 - **オーディオ**: .mp3/.wav/.ogg インポート、**Audio Source** コンポーネント
   (Volume/Loop/Play On Awake/**3D空間減衰**)、ListenerはGameカメラへ自動付帯、
   ⏸で一時停止連動、スクリプトから `ctx.playSound(name)` でワンショット再生
+- **ジョイント**: **Fixed / Hinge / Spring Joint** (Rapier impulse joints)。
+  Connected Body選択 (None=ワールド係留)、Anchor/Axis/バネ係数̶̶ドアの蝶番や振り子、
+  吊り物などの物理ギミックが組める
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play

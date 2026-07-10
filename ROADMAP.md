@@ -53,6 +53,7 @@
 | **マウス入力 + ScreenPointToRay** | ✅ ctx.input.getMouseButton/Down・mousePosition (Gameビュー左下原点px) + ctx.screenPointToRay → physics.raycast でクリック判定が完結 (D-031) |
 | **GetComponent / SetParent / worldPosition** | ✅ ctx.node.getComponent(型 or スクリプト名) の live読み書きプロキシ、setParent (循環ガード付き)、worldPosition (D-031) |
 | **オーディオ (AudioSource)** | ✅ .mp3/.wav/.oggインポート、AudioSource (volume/loop/playOnAwake/spatial/距離減衰)、GameカメラへのListener自動付帯、⏸連動suspend、ctx.playSound ワンショット (D-032)。Audio Mixerは対象外 |
+| **物理ジョイント** | ✅ Fixed / Hinge / Spring (Rapier impulse joints)。Connected Body選択、None=ワールド係留、Anchor/Axis/バネ係数 (D-033)。振り子・同伴落下・係留をE2E実測 |
 
 ## 未対応 — 優先度順の実装計画
 
@@ -61,7 +62,6 @@
   差分のApply/Revert個別選択UI。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。
-- **ジョイント**: Fixed/Hinge/Spring (Rapierのimpulse joints結線)。
 
 ### P2 (価値は高いが規模が大きい)
 - **AnimatorステートマシンとClip選択**: 現状はGLB全Clipを同時再生。最低限「再生Clipの選択」を

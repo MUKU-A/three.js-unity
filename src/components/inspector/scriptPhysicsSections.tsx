@@ -3,8 +3,17 @@
  * ScriptSection は props宣言を自動でフィールド化する (Unityの[SerializeField]リフレクション相当)。
  */
 import { useState, type ReactNode } from 'react'
-import { ChevronRight, FileCode, MoreVertical, Shield, Volume2, Weight } from 'lucide-react'
-import type { AudioSourceComponent, ColliderComponent, RigidbodyComponent, ScriptComponent, SceneNode, Vec3 } from '../../types/scene'
+import { ChevronRight, FileCode, Link2, MoreVertical, Shield, Volume2, Weight } from 'lucide-react'
+import type {
+  AudioSourceComponent,
+  ColliderComponent,
+  JointComponent,
+  RigidbodyComponent,
+  ScriptComponent,
+  SceneNode,
+  Vec3,
+} from '../../types/scene'
+import { getComponent } from '../../types/scene'
 import { cmdPatchComponent, cmdRemoveComponent, useEditorStore } from '../../store/editorStore'
 import { compileScript, extractProps } from '../../engine/scripting'
 import { useContextMenu, type MenuItem } from '../common/ContextMenu'
@@ -266,6 +275,74 @@ export function RigidbodySection({ node, comp, index }: { node: SceneNode; comp:
           <NumberRow label="Angular Damping" value={comp.angularDamping} {...key<number>('angularDamping')} />
           <CheckboxRow label="Use Gravity" value={comp.useGravity} onCommit={(b, a) => key<boolean>('useGravity').onCommit(b, a)} />
           <CheckboxRow label="Is Kinematic" value={comp.isKinematic} onCommit={(b, a) => key<boolean>('isKinematic').onCommit(b, a)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ---------------------------------- Joint (D-033) ---------------------------------- */
+
+export function JointSection({ node, comp, index }: { node: SceneNode; comp: JointComponent; index: number }) {
+  const [open, setOpen] = useState(true)
+  const { key } = useComponentCommit(node.id, index)
+  const nodes = useEditorStore((s) => s.scene.nodes)
+  /* 接続候補: rigidbody または collider を持つ他ノード (静的ボディも可) */
+  const candidates = Object.values(nodes).filter(
+    (n) => n.id !== node.id && (getComponent(n, 'rigidbody') || getComponent(n, 'collider')),
+  )
+  const title = comp.jointType === 'fixed' ? 'Fixed Joint' : comp.jointType === 'spring' ? 'Spring Joint' : 'Hinge Joint'
+
+  return (
+    <div>
+      <Header
+        icon={<Link2 size={13} className="text-[#9fd0a0]" />}
+        title={title}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        menuItems={removeMenu(node.id, index)}
+      />
+      {open && (
+        <div className="py-1 flex flex-col gap-[2px]">
+          <SelectRow
+            label="Joint Type"
+            value={comp.jointType}
+            options={[
+              { value: 'hinge', label: 'Hinge' },
+              { value: 'fixed', label: 'Fixed' },
+              { value: 'spring', label: 'Spring' },
+            ]}
+            onCommit={(b, a) => key<string>('jointType', 'Change Joint Type').onCommit(b, a)}
+          />
+          <SelectRow
+            label="Connected Body"
+            value={comp.connectedNodeId ?? ''}
+            options={[
+              { value: '', label: 'None (World)' },
+              ...candidates.map((n) => ({ value: n.id, label: n.name })),
+            ]}
+            onCommit={(b, a) =>
+              key<string | null>('connectedNodeId', 'Set Connected Body').onCommit(b === '' ? null : b, a === '' ? null : a)
+            }
+          />
+          <Vector3Row label="Anchor" value={comp.anchor} onTransient={(v) => key<Vec3>('anchor').onTransient(v)} onCommit={(b, a) => key<Vec3>('anchor').onCommit(b, a)} />
+          <Vector3Row
+            label="Connected Anchor"
+            value={comp.connectedAnchor}
+            onTransient={(v) => key<Vec3>('connectedAnchor').onTransient(v)}
+            onCommit={(b, a) => key<Vec3>('connectedAnchor').onCommit(b, a)}
+          />
+          {comp.jointType === 'hinge' && (
+            <Vector3Row label="Axis" value={comp.axis} onTransient={(v) => key<Vec3>('axis').onTransient(v)} onCommit={(b, a) => key<Vec3>('axis').onCommit(b, a)} />
+          )}
+          {comp.jointType === 'spring' && (
+            <>
+              <NumberRow label="Stiffness" value={comp.stiffness} {...key<number>('stiffness')} />
+              <NumberRow label="Damping" value={comp.damping} {...key<number>('damping')} />
+              <NumberRow label="Rest Length" value={comp.restLength} {...key<number>('restLength')} />
+            </>
+          )}
+          <div className="px-2 py-0.5 text-[10px] text-u-sub">Requires a Rigidbody (or static Collider) on this object.</div>
         </div>
       )}
     </div>

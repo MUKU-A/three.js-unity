@@ -188,6 +188,16 @@
 - ctx.playSound(名前|ID, volume) は自ノード位置からの3Dワンショット (PlayOneShot相当)。
 - Audio Mixer / エフェクトルーティングはスコープ外 (ROADMAP)。
 
+## D-033: 物理ジョイント = Rapier impulse joints (Fixed/Hinge/Spring)
+- JointComponent はジョイントを持つ側のノードに付け、Connected Body でもう一方を選ぶ
+  (候補は rigidbody/collider を持つノード)。None はワールド係留 —
+  自身アンカーの現在ワールド位置に固定ボディを生成して接続 (Unityの Connected Body: None 互換)。
+- Hinge は revolute (Axis正規化)、Spring は restLength/stiffness/damping。
+  アンカーはコライダー同様ワールドスケールを乗算。
+- ボディ全生成後の第2パスで張る。ボディ除去時のジョイント破棄は Rapier 側が保証。
+- 拘束の実測E2E: 振り子がアンカーから2.00m を維持して振れる / Fixedペアが Δy=2.00 を
+  保ったまま落下 / Spring がワールド係留で自由落下しない。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

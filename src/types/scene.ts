@@ -178,6 +178,38 @@ export const defaultAudioSource = (): AudioSourceComponent => ({
   maxDistance: 30,
 })
 
+/**
+ * 物理ジョイント (D-033)。自身に rigidbody (または静的collider) が必要。
+ * connectedNodeId=null はワールド空間への固定 (Unityの Connected Body: None 相当)。
+ */
+export interface JointComponent {
+  type: 'joint'
+  jointType: 'fixed' | 'hinge' | 'spring'
+  connectedNodeId?: NodeId | null
+  /** 自身ローカルのアンカー */
+  anchor: Vec3
+  /** 接続先ローカルのアンカー */
+  connectedAnchor: Vec3
+  /** hinge: 回転軸 (ローカル) */
+  axis: Vec3
+  /** spring */
+  stiffness: number
+  damping: number
+  restLength: number
+}
+
+export const defaultJoint = (jointType: JointComponent['jointType'] = 'hinge'): JointComponent => ({
+  type: 'joint',
+  jointType,
+  connectedNodeId: null,
+  anchor: vec3(0, 0, 0),
+  connectedAnchor: vec3(0, 0, 0),
+  axis: vec3(0, 0, 1),
+  stiffness: 100,
+  damping: 5,
+  restLength: 2,
+})
+
 export type Component =
   | MeshComponent
   | MaterialComponent
@@ -187,6 +219,7 @@ export type Component =
   | RigidbodyComponent
   | ColliderComponent
   | AudioSourceComponent
+  | JointComponent
 export type ComponentType = Component['type']
 
 /* ---------------------------------- Node / Scene ---------------------------------- */

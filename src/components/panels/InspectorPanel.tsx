@@ -3,12 +3,13 @@
  * マルチ選択時はアクティブ(末尾)を表示 (D-010)。
  */
 import { useRef, useState } from 'react'
-import { Box, Camera, FileCode, Lightbulb, Palette, Plus, Search, Shield, Volume2, Weight } from 'lucide-react'
+import { Box, Camera, FileCode, Lightbulb, Link2, Palette, Plus, Search, Shield, Volume2, Weight } from 'lucide-react'
 import { activeNodeId, cmdAddComponent, cmdPatchNode, useEditorStore } from '../../store/editorStore'
 import {
   defaultAudioSource,
   defaultCamera,
   defaultCollider,
+  defaultJoint,
   defaultLight,
   defaultMaterial,
   defaultMesh,
@@ -19,7 +20,7 @@ import {
 import type { Component } from '../../types/scene'
 import { NodeIcon } from '../common/NodeIcon'
 import { CameraSection, LightSection, MaterialSection, MeshSection, TransformSection } from '../inspector/sections'
-import { AudioSourceSection, ColliderSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
+import { AudioSourceSection, ColliderSection, JointSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
 
 export function InspectorPanel() {
   const node = useEditorStore((s) => {
@@ -59,6 +60,8 @@ export function InspectorPanel() {
             return <ColliderSection key={k} node={node} comp={c} index={i} />
           case 'audiosource':
             return <AudioSourceSection key={k} node={node} comp={c} index={i} />
+          case 'joint':
+            return <JointSection key={k} node={node} comp={c} index={i} />
           default:
             return null
         }
@@ -143,6 +146,9 @@ const COMPONENT_DEFS: Array<{
   { type: 'collider', label: 'Box Collider', icon: <Shield size={13} />, make: () => defaultCollider('box') },
   { type: 'collider', label: 'Sphere Collider', icon: <Shield size={13} />, make: () => defaultCollider('sphere') },
   { type: 'audiosource', label: 'Audio Source', icon: <Volume2 size={13} />, make: () => defaultAudioSource() },
+  { type: 'joint', label: 'Hinge Joint', icon: <Link2 size={13} />, make: () => defaultJoint('hinge') },
+  { type: 'joint', label: 'Fixed Joint', icon: <Link2 size={13} />, make: () => defaultJoint('fixed') },
+  { type: 'joint', label: 'Spring Joint', icon: <Link2 size={13} />, make: () => defaultJoint('spring') },
 ]
 
 function AddComponentButton({ nodeId }: { nodeId: string }) {

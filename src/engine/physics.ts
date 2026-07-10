@@ -77,7 +77,64 @@ export class PhysicsWorld {
       if (!isChainVisible(nodes, id)) continue
       if (this.addNode(nodes[id], objectFor(nodes[id].id), log)) count++
     }
-    if (count > 0) log('info', `Physics world started — ${count} bod${count === 1 ? 'y' : 'ies'}`)
+    /* 全ボディ生成後にジョイントを張る (D-033) */
+    let joints = 0
+    for (const id in nodes) {
+      if (!this.entries.has(id)) continue
+      const jc = getComponent(nodes[id], 'joint')
+      if (jc && this.createJoint(nodes[id], jc, objectFor, log)) joints++
+    }
+    if (count > 0)
+      log('info', `Physics world started — ${count} bod${count === 1 ? 'y' : 'ies'}${joints > 0 ? `, ${joints} joint(s)` : ''}`)
+  }
+
+  /** ジョイント生成。connectedNodeId=null はワールドへ固定 */
+  private createJoint(
+    node: SceneNode,
+    jc: import('../types/scene').JointComponent,
+    objectFor: (id: NodeId) => THREE.Object3D | undefined,
+    log: (level: 'info' | 'warn', msg: string) => void,
+  ): boolean {
+    if (!RAPIER || !this.world) return false
+    const selfEntry = this.entries.get(node.id)
+    if (!selfEntry) return false
+
+    const selfScale = objectFor(node.id)?.getWorldScale(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1)
+    const a1 = { x: jc.anchor.x * selfScale.x, y: jc.anchor.y * selfScale.y, z: jc.anchor.z * selfScale.z }
+
+    let otherBody: RAPIER_NS.RigidBody
+    let a2 = { x: jc.connectedAnchor.x, y: jc.connectedAnchor.y, z: jc.connectedAnchor.z }
+    if (jc.connectedNodeId && this.entries.has(jc.connectedNodeId)) {
+      const otherScale = objectFor(jc.connectedNodeId)?.getWorldScale(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1)
+      otherBody = this.entries.get(jc.connectedNodeId)!.body
+      a2 = { x: a2.x * otherScale.x, y: a2.y * otherScale.y, z: a2.z * otherScale.z }
+    } else {
+      if (jc.connectedNodeId) {
+        log('warn', `'${node.name}' joint: connected body has no Rigidbody/Collider — anchoring to world`)
+      }
+      /* ワールド固定: 自身のアンカーの現在ワールド位置に固定ボディを置く */
+      const t = selfEntry.body.translation()
+      const r = selfEntry.body.rotation()
+      const world = new THREE.Vector3(a1.x, a1.y, a1.z)
+        .applyQuaternion(new THREE.Quaternion(r.x, r.y, r.z, r.w))
+        .add(new THREE.Vector3(t.x, t.y, t.z))
+      otherBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(world.x, world.y, world.z))
+      a2 = { x: 0, y: 0, z: 0 }
+    }
+
+    const IDENT = { w: 1, x: 0, y: 0, z: 0 }
+    let data: RAPIER_NS.JointData
+    if (jc.jointType === 'fixed') {
+      data = RAPIER.JointData.fixed(a1, IDENT, a2, IDENT)
+    } else if (jc.jointType === 'spring') {
+      data = RAPIER.JointData.spring(Math.max(0, jc.restLength), Math.max(0, jc.stiffness), Math.max(0, jc.damping), a1, a2)
+    } else {
+      const len = Math.hypot(jc.axis.x, jc.axis.y, jc.axis.z) || 1
+      const axis = { x: jc.axis.x / len, y: jc.axis.y / len, z: jc.axis.z / len }
+      data = RAPIER.JointData.revolute(a1, a2, axis)
+    }
+    this.world.createImpulseJoint(data, selfEntry.body, otherBody, true)
+    return true
   }
 
   /** 1ノード分のボディを構築 (再生中の Instantiate でも使用) */
