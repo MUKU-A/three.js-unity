@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Unity公式オフラインドキュメントの置き場 (再配布禁止のためコミット対象外)
+docs/unity-offline/

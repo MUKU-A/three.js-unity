@@ -57,7 +57,8 @@ UI操作 ──▶ Command ──▶ Zustandストア (正規化シーングラ�
 - `src/engine/` — SSoT→Three.js 一方向同期エンジン、アセットレジストリ、シリアライズ
 - `src/components/` — dockviewレイアウト、5パネル、Inspectorフィールド (スクラブ実装は `inspector/fields.tsx`)
 
-設計判断の記録: **[DECISIONS.md](./DECISIONS.md)** / Unity UI調査: **[UNITY_UI_RESEARCH.md](./UNITY_UI_RESEARCH.md)**
+設計判断の記録: **[DECISIONS.md](./DECISIONS.md)** / Unity UI調査: **[UNITY_UI_RESEARCH.md](./UNITY_UI_RESEARCH.md)** /
+Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DOC_LINKS.md)** (本文の複製はpublicリポジトリでは権利上不可のためリンク集。D-018参照)
 
 ## 拡張余地 (スコープ外として設計だけ確保)
 
