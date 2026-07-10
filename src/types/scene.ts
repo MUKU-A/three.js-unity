@@ -235,6 +235,12 @@ export interface SceneNode {
   components: Component[]
   /** プレハブインスタンスのルートに付くアセット参照 (D-029)。Hierarchyで青表示 */
   prefabId?: string | null
+  /**
+   * プレハブテンプレート内での対応ノードID (D-034)。インスタンス配下の各ノードに付き、
+   * 差分オーバーライドの3方向マージでノード対応を取るために使う。
+   * 未設定 = ユーザーがインスタンスへ後から追加したノード。
+   */
+  prefabNodeId?: string | null
 }
 
 export interface SceneGraph {

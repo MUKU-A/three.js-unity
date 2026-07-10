@@ -43,9 +43,12 @@ npm run build    # 本番ビルド (tsc + vite)
   Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
 - **アニメーション**: モデルのClipをInspectorで選択 (All/None/Clip名)、スクリプトから
   crossfade切替。**FBX / OBJ** のインポートにも対応
-- **Prefab**: 右クリック「Create Prefab」でアセット化 (Hierarchyで**青表示**)、Projectから
-  インスタンス化 (DnD/Add to Scene)、**Apply to Prefab** (全インスタンスへ伝播・1 Undo) /
-  **Revert** (rootのTransformは維持) / **Unpack**。シーンJSONに自動で内蔵保存される
+- **Prefab (差分オーバーライド対応)**: 右クリック「Create Prefab」でアセット化 (Hierarchyで**青表示**)、
+  ProjectからDnD/Add to Sceneでインスタンス化。**プロパティ単位のオーバーライド**を保持したまま
+  テンプレート更新に追従 (3方向マージ) — 色だけ変えたインスタンスはApply後も色を保ち、他の
+  変更点は追従する。InspectorのプレハブバーにOverrides数 + **Apply / Revert**。
+  ユーザー追加ノードはApplyでプレハブ入り、**Nested Prefab**の内側リンクも保持。
+  シーンJSONに自動で内蔵保存される
 - **オーディオ**: .mp3/.wav/.ogg インポート、**Audio Source** コンポーネント
   (Volume/Loop/Play On Awake/**3D空間減衰**)、ListenerはGameカメラへ自動付帯、
   ⏸で一時停止連動、スクリプトから `ctx.playSound(name)` でワンショット再生

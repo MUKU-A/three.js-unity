@@ -2,7 +2,7 @@
  * 高レベル編集アクション (Hierarchyメニュー・ショートカット・ツールバーで共用)。
  * すべて Command 経由で SSoT を変更する。
  */
-import type { LightKind, NodeId, PrimitiveKind, SceneGraph, SceneNode, Vec3 } from '../types/scene'
+import type { LightKind, NodeId, PrimitiveKind, SceneNode, Vec3 } from '../types/scene'
 import { collectSubtreeIds } from '../types/scene'
 import {
   cmdAddObject,
@@ -17,8 +17,9 @@ import {
   topmostOnly,
   useEditorStore,
 } from './editorStore'
-import { addSubtree, cloneSubtree, removeSubtree, uniqueSiblingName } from './sceneOps'
+import { addSubtree, cloneSubtree, patchNode, removeSubtree, uniqueSiblingName } from './sceneOps'
 import { createPrefabAsset, getPrefabNodes, updatePrefabAsset } from '../engine/assets'
+import { buildTemplateFromInstance, mergeTemplateUpdate } from './prefabSync'
 
 const st = () => useEditorStore.getState()
 
@@ -95,14 +96,17 @@ export function setNodeVisible(id: NodeId, visible: boolean) {
   st().execute(cmdPatchNode(id, { visible: node.visible }, { visible }, visible ? 'Activate' : 'Deactivate'))
 }
 
-/* ---------------------------------- Prefab (D-029) ---------------------------------- */
+/* ---------------------------------- Prefab v2 (D-029/D-034) ---------------------------------- */
 
-/** テンプレートノード群を新IDで複製 (ルート名は呼び側で上書きする) */
+/** テンプレートノード群を新IDで複製し、prefabNodeId をテンプレートIDに設定 (DFS順が対応) */
 function reidTemplate(template: SceneNode[]): { nodes: SceneNode[]; rootId: NodeId } | null {
   if (template.length === 0) return null
   const tmp: Record<string, SceneNode> = {}
   template.forEach((n) => (tmp[n.id] = n))
-  return cloneSubtree({ name: '', nodes: tmp, rootIds: [template[0].id] }, template[0].id)
+  const re = cloneSubtree({ name: '', nodes: tmp, rootIds: [template[0].id] }, template[0].id)
+  if (!re) return null
+  re.nodes = re.nodes.map((n, i) => ({ ...n, prefabNodeId: template[i]?.id ?? null }))
+  return re
 }
 
 /** 選択ノードのサブツリーをプレハブアセット化し、元ノードをインスタンスとしてリンク */
@@ -110,12 +114,13 @@ export function createPrefabFromNode(id: NodeId) {
   const g = st().scene
   const node = g.nodes[id]
   if (!node) return
-  const nodes = collectSubtreeIds(g.nodes, id).map((i) => structuredClone(g.nodes[i]))
-  nodes[0] = { ...nodes[0], parentId: null, prefabId: null }
-  const meta = createPrefabAsset(node.name, nodes)
+  const built = buildTemplateFromInstance(g, id, [])
+  if (!built) return
+  const meta = createPrefabAsset(node.name, built.template)
   st().setAssets([...st().assets, meta])
-  st().execute(cmdPatchNode(id, { prefabId: node.prefabId ?? null }, { prefabId: meta.id }, 'Create Prefab'))
-  st().log('info', `Created prefab '${meta.name}' (${nodes.length} node(s))`)
+  const after = patchNode(built.graph, id, { prefabId: meta.id })
+  st().execute(cmdReplaceGraph(g, after, 'Create Prefab'))
+  st().log('info', `Created prefab '${meta.name}' (${built.template.length} node(s))`)
 }
 
 /** プレハブをシーンへインスタンス化 */
@@ -135,68 +140,79 @@ export function instantiatePrefab(assetId: string, position?: Vec3, parentId: No
   return re.rootId
 }
 
-/** インスタンス1つをテンプレートから再構築 (root の transform/name/visible/位置は維持) */
-function replaceInstanceSubtree(graph: SceneGraph, instanceRootId: NodeId, assetId: string): SceneGraph {
-  const inst = graph.nodes[instanceRootId]
-  const template = getPrefabNodes(assetId)
-  if (!inst || !template || template.length === 0) return graph
-  const keep = { transform: inst.transform, name: inst.name, visible: inst.visible }
-  const parentId = inst.parentId
-  const siblings = parentId ? (graph.nodes[parentId]?.childrenIds ?? []) : graph.rootIds
-  const index = siblings.indexOf(instanceRootId)
-  const re = reidTemplate(template)
-  if (!re) return graph
-  re.nodes[0] = { ...re.nodes[0], ...keep, prefabId: assetId }
-  const removed = removeSubtree(graph, instanceRootId).graph
-  return addSubtree(removed, re.nodes, parentId, index)
-}
-
 /**
- * Apply: このインスタンスの内容をプレハブアセットへ書き戻し、他の全インスタンスへ伝播。
- * v1仕様: プロパティ単位の差分ではなく全体置換。他インスタンスの root transform/name/visible は維持。
- * アセット更新自体はUnity同様Undo対象外、シーン側の伝播は1コマンドでUndo可能。
+ * Apply (v2): インスタンスの現状からテンプレートを再構築してアセットへ書き戻し、
+ * 他インスタンスへは3方向マージで伝播 — 各インスタンスのオーバーライドは保持される。
+ * シーン側の変更は1コマンドでUndo可能 (アセット更新はUnity同様Undo対象外)。
  */
 export function applyToPrefab(instanceRootId: NodeId) {
   const g = st().scene
   const inst = g.nodes[instanceRootId]
   const assetId = inst?.prefabId
   if (!inst || !assetId) return
-  const prevTemplate = getPrefabNodes(assetId)
-  const nodes = collectSubtreeIds(g.nodes, instanceRootId).map((i) => structuredClone(g.nodes[i]))
-  nodes[0] = {
-    ...nodes[0],
-    parentId: null,
-    prefabId: null,
-    /* プレハブ自体のroot transform/名前は維持 (rootのTransformはインスタンス毎の値というUnity意味論) */
-    transform: prevTemplate?.[0]?.transform ?? nodes[0].transform,
-    name: prevTemplate?.[0]?.name ?? nodes[0].name,
-  }
-  if (!updatePrefabAsset(assetId, nodes)) return
-  st().setAssets(st().assets.map((a) => (a.id === assetId ? { ...a, size: JSON.stringify(nodes).length } : a)))
+  const oldTemplate = getPrefabNodes(assetId) ?? []
+  const built = buildTemplateFromInstance(g, instanceRootId, oldTemplate)
+  if (!built) return
+  if (!updatePrefabAsset(assetId, built.template)) return
+  st().setAssets(st().assets.map((a) => (a.id === assetId ? { ...a, size: JSON.stringify(built.template).length } : a)))
 
-  let after = g
+  let after = built.graph
+  let others = 0
   for (const [nid, n] of Object.entries(g.nodes)) {
-    if (n.prefabId === assetId && nid !== instanceRootId) after = replaceInstanceSubtree(after, nid, assetId)
+    if (n.prefabId === assetId && nid !== instanceRootId && after.nodes[nid]) {
+      after = mergeTemplateUpdate(after, nid, oldTemplate, built.template)
+      others++
+    }
   }
   if (after !== g) st().execute(cmdReplaceGraph(g, after, 'Apply Prefab'))
-  st().log('info', `Applied changes to prefab — ${countInstances(assetId) - 1} other instance(s) updated`)
+  st().log('info', `Applied to prefab — ${others} other instance(s) merged (overrides preserved)`)
 }
 
-/** Revert: インスタンスをプレハブの内容へ戻す (root transform/name/visible は維持) */
+/**
+ * Revert (v2): 全オーバーライドを破棄しテンプレートへ戻す。
+ * root の id/transform/name/visible/親位置 は維持 (Unityのインスタンス所有プロパティ)。
+ */
 export function revertToPrefab(instanceRootId: NodeId) {
   const g = st().scene
   const inst = g.nodes[instanceRootId]
-  if (!inst?.prefabId) return
-  const after = replaceInstanceSubtree(g, instanceRootId, inst.prefabId)
-  if (after !== g) st().execute(cmdReplaceGraph(g, after, 'Revert Prefab'))
+  const assetId = inst?.prefabId
+  if (!inst || !assetId) return
+  const template = getPrefabNodes(assetId)
+  if (!template || template.length === 0) return
+  const re = reidTemplate(template)
+  if (!re) return
+
+  const keepParent = inst.parentId
+  const siblings = keepParent ? (g.nodes[keepParent]?.childrenIds ?? []) : g.rootIds
+  const index = siblings.indexOf(instanceRootId)
+
+  /* root は既存IDを維持して選択やUndo参照を壊さない */
+  const oldRootId = re.nodes[0].id
+  re.nodes = re.nodes.map((n, i) =>
+    i === 0
+      ? {
+          ...n,
+          id: instanceRootId,
+          prefabId: assetId,
+          transform: structuredClone(inst.transform),
+          name: inst.name,
+          visible: inst.visible,
+        }
+      : { ...n, parentId: n.parentId === oldRootId ? instanceRootId : n.parentId },
+  )
+  let after = removeSubtree(g, instanceRootId).graph
+  after = addSubtree(after, re.nodes, keepParent, index)
+  st().execute(cmdReplaceGraph(g, after, 'Revert Prefab'))
 }
 
-/** Unpack: プレハブリンクを解除して通常のノードにする */
+/** Unpack: プレハブリンクを解除して通常のノードにする (配下のtidも除去) */
 export function unpackPrefab(instanceRootId: NodeId) {
-  const inst = st().scene.nodes[instanceRootId]
+  const g = st().scene
+  const inst = g.nodes[instanceRootId]
   if (!inst?.prefabId) return
-  st().execute(cmdPatchNode(instanceRootId, { prefabId: inst.prefabId }, { prefabId: null }, 'Unpack Prefab'))
+  let after = patchNode(g, instanceRootId, { prefabId: null })
+  for (const nid of collectSubtreeIds(g.nodes, instanceRootId)) {
+    if (after.nodes[nid]?.prefabNodeId) after = patchNode(after, nid, { prefabNodeId: null })
+  }
+  st().execute(cmdReplaceGraph(g, after, 'Unpack Prefab'))
 }
-
-const countInstances = (assetId: string) =>
-  Object.values(st().scene.nodes).filter((n) => n.prefabId === assetId).length

@@ -48,7 +48,8 @@
 | 3. 対応フォーマット | ✅ GLB/GLTF + **FBX / OBJ** (モデル)、PNG/JPG/WebP (テクスチャ)。オーディオは未対応 (下記) |
 | 3. Normal Map / Tiling / Offset | ✅ MaterialComponentに追加、マテリアル毎テクスチャ複製で共有汚染なし |
 | (前回対応) Gameビュー/メニューバー/Unity操作系 | ✅ D-019〜D-024 |
-| **Prefabシステム v1** | ✅ 作成/インスタンス化/Apply(全インスタンス伝播・1Undo)/Revert(root transform維持)/Unpack、Hierarchy青表示、JSON永続化 (D-029)。差分オーバーライド・Nested/Variantは残 (P2) |
+| **Prefabシステム v1** | ✅ 作成/インスタンス化/Apply/Revert/Unpack、Hierarchy青表示、JSON永続化 (D-029) |
+| **Prefab v2 (差分オーバーライド)** | ✅ prefabNodeId対応付け + 3方向マージ。**プロパティ単位**でオーバーライド保持しつつテンプレ更新へ追従、ユーザー追加/削除ノードの扱い、Nestedリンク保持、InspectorのOverrides(n)バー (D-034)。Variantは残 |
 | ライフサイクル完全化 | ✅ onAwake → onEnable → onStart → (Update系) → onDisable → onDestroy の厳密順序 (D-030) |
 | **マウス入力 + ScreenPointToRay** | ✅ ctx.input.getMouseButton/Down・mousePosition (Gameビュー左下原点px) + ctx.screenPointToRay → physics.raycast でクリック判定が完結 (D-031) |
 | **GetComponent / SetParent / worldPosition** | ✅ ctx.node.getComponent(型 or スクリプト名) の live読み書きプロキシ、setParent (循環ガード付き)、worldPosition (D-031) |
@@ -58,10 +59,10 @@
 ## 未対応 — 優先度順の実装計画
 
 ### P1 (次のイテレーション候補)
-- **Prefab v2**: プロパティ単位の差分オーバーライド (現状は全体置換のv1)、Nested Prefab、Variant、
-  差分のApply/Revert個別選択UI。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。
+- **Prefab Variant / オーバーライド個別選択UI**: v2の差分基盤の上に、Unityの
+  Overridesドロップダウン (項目別Apply/Revert) とVariantを載せる。
 
 ### P2 (価値は高いが規模が大きい)
 - **AnimatorステートマシンとClip選択**: 現状はGLB全Clipを同時再生。最低限「再生Clipの選択」を

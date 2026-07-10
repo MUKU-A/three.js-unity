@@ -2,7 +2,10 @@
  * Inspector パネル: 選択オブジェクトのヘッダ + コンポーネント群 + Add Component。
  * マルチ選択時はアクティブ(末尾)を表示 (D-010)。
  */
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { getPrefabNodes } from '../../engine/assets'
+import { countOverrides } from '../../store/prefabSync'
+import { applyToPrefab, revertToPrefab } from '../../store/actions'
 import { Box, Camera, FileCode, Lightbulb, Link2, Palette, Plus, Search, Shield, Volume2, Weight } from 'lucide-react'
 import { activeNodeId, cmdAddComponent, cmdPatchNode, useEditorStore } from '../../store/editorStore'
 import {
@@ -40,6 +43,7 @@ export function InspectorPanel() {
   return (
     <div className="h-full bg-u-panel overflow-y-auto overflow-x-hidden select-none">
       <Header key={`h-${node.id}`} nodeId={node.id} />
+      {node.prefabId && <PrefabBar key={`p-${node.id}`} nodeId={node.id} prefabId={node.prefabId} />}
       <TransformSection key={`t-${node.id}`} node={node} />
       {node.components.map((c, i) => {
         const k = `${node.id}-${i}-${c.type}`
@@ -124,6 +128,37 @@ function NameField({ nodeId, name }: { nodeId: string; name: string }) {
         e.stopPropagation()
       }}
     />
+  )
+}
+
+/* ---------------------------------- Prefabバー (D-034) ---------------------------------- */
+
+function PrefabBar({ nodeId, prefabId }: { nodeId: string; prefabId: string }) {
+  const scene = useEditorStore((s) => s.scene)
+  const assets = useEditorStore((s) => s.assets)
+  const meta = assets.find((a) => a.id === prefabId)
+  /* オーバーライド数 (テンプレートと現状の差分をオンデマンド計算) */
+  const overrides = useMemo(() => {
+    const template = getPrefabNodes(prefabId)
+    return template ? countOverrides(scene, nodeId, template) : 0
+  }, [scene, nodeId, prefabId, meta?.size])
+
+  return (
+    <div className="flex items-center gap-1.5 px-2 py-1 bg-[#33404d] border-b border-u-border">
+      <Box size={13} className="text-[#8ab8e8] flex-none" />
+      <span className="text-[#b8dcff] text-[11px] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+        {meta?.name ?? 'Missing Prefab'}
+      </span>
+      <span className="text-u-sub text-[11px]" title="Overridden properties">
+        Overrides ({overrides})
+      </span>
+      <button className="u-btn !h-[18px] !px-2 text-[11px]" disabled={overrides === 0} onClick={() => applyToPrefab(nodeId)}>
+        Apply
+      </button>
+      <button className="u-btn !h-[18px] !px-2 text-[11px]" disabled={overrides === 0} onClick={() => revertToPrefab(nodeId)}>
+        Revert
+      </button>
+    </div>
   )
 }
 
