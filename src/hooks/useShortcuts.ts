@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { useEditorStore } from '../store/editorStore'
 import { copySelection, deleteSelection, duplicateSelection, pasteClipboard } from '../store/actions'
 import { exportSceneToFile } from '../engine/serialization'
+import { getEngine } from '../engine/ThreeEngine'
 
 const isEditableTarget = (t: EventTarget | null) => {
   const el = t as HTMLElement | null
@@ -21,6 +22,7 @@ export function useShortcuts() {
     const onKeyDown = (e: KeyboardEvent) => {
       const st = useEditorStore.getState()
       if (isEditableTarget(e.target)) return
+      if (getEngine().isFlying) return // フライスルー中のWASDQE等はカメラ移動専用 (Unity互換)
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
 
@@ -60,6 +62,11 @@ export function useShortcuts() {
       if (key === 's') {
         e.preventDefault()
         return exportSceneToFile()
+      }
+      if (key === 'p' && !e.shiftKey) {
+        /* Ctrl+P = Play/Stop (Unity互換) */
+        e.preventDefault()
+        return st.mode === 'edit' ? st.play() : st.stop()
       }
       if (key === 'c') {
         if (st.selection.length === 0) return

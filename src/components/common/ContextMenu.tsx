@@ -63,7 +63,7 @@ export function ContextMenu({
   )
 }
 
-function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+export function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
   const [openSub, setOpenSub] = useState<number | null>(null)
 
   return (

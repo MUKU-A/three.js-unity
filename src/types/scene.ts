@@ -68,6 +68,8 @@ export type LightKind = 'directional' | 'point' | 'spot'
 
 export interface LightComponent {
   type: 'light'
+  /** Unityのビヘイビアチェックボックス相当 (未定義=true) */
+  enabled?: boolean
   lightType: LightKind
   color: string
   intensity: number
@@ -82,6 +84,8 @@ export interface LightComponent {
 
 export interface CameraComponent {
   type: 'camera'
+  /** Unityのビヘイビアチェックボックス相当 (未定義=true) */
+  enabled?: boolean
   projection: 'perspective' | 'orthographic'
   fov: number
   near: number
@@ -165,6 +169,7 @@ export const defaultMesh = (geometry: PrimitiveKind = 'box'): MeshComponent => (
 
 export const defaultLight = (lightType: LightKind = 'directional'): LightComponent => ({
   type: 'light',
+  enabled: true,
   lightType,
   color: '#ffffff',
   intensity: lightType === 'directional' ? 1 : lightType === 'point' ? 10 : 30,
@@ -176,6 +181,7 @@ export const defaultLight = (lightType: LightKind = 'directional'): LightCompone
 
 export const defaultCamera = (): CameraComponent => ({
   type: 'camera',
+  enabled: true,
   projection: 'perspective',
   fov: 60,
   near: 0.3,

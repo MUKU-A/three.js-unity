@@ -29,12 +29,17 @@ function ComponentHeader({
   open,
   onToggle,
   menuItems,
+  enabled,
+  onToggleEnabled,
 }: {
   icon: ReactNode
   title: string
   open: boolean
   onToggle: () => void
   menuItems: MenuItem[]
+  /** Unityのビヘイビアチェックボックス (Light/Camera等)。undefined なら非表示 */
+  enabled?: boolean
+  onToggleEnabled?: () => void
 }) {
   const menu = useContextMenu()
   return (
@@ -42,6 +47,15 @@ function ComponentHeader({
       <span className="u-foldout" data-open={open}>
         <ChevronRight size={11} />
       </span>
+      {enabled !== undefined && (
+        <input
+          type="checkbox"
+          className="u-check !w-[13px] !h-[13px]"
+          checked={enabled}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => onToggleEnabled?.()}
+        />
+      )}
       {icon}
       <span className="flex-1 overflow-hidden text-ellipsis">{title}</span>
       <button
@@ -236,6 +250,8 @@ export function LightSection({ node, comp, index }: { node: SceneNode; comp: Lig
         open={open}
         onToggle={() => setOpen(!open)}
         menuItems={removeMenu(node.id, index)}
+        enabled={comp.enabled !== false}
+        onToggleEnabled={() => key<'enabled', boolean>('enabled', 'Toggle Light').onCommit(comp.enabled !== false, comp.enabled === false)}
       />
       {open && (
         <Section>
@@ -279,6 +295,8 @@ export function CameraSection({ node, comp, index }: { node: SceneNode; comp: Ca
         open={open}
         onToggle={() => setOpen(!open)}
         menuItems={removeMenu(node.id, index)}
+        enabled={comp.enabled !== false}
+        onToggleEnabled={() => key<'enabled', boolean>('enabled', 'Toggle Camera').onCommit(comp.enabled !== false, comp.enabled === false)}
       />
       {open && (
         <Section>

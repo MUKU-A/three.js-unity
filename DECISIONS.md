@@ -85,6 +85,37 @@
 - Unityは同名兄弟が存在する場合 "Cube (1)" と連番を付ける。作成・複製の両方で
   uniqueSiblingName() により同挙動を再現。
 
+## D-019: メニューバー (File/Edit/GameObject/Component/Window/Help) を追加
+- Unity最上段のメニュー体系を機能実装 (New/Open/Save Scene、動的ラベルのUndo/Redo、
+  作成メニュー共有、コンポーネント追加、レイアウトリセット)。ホバーでのメニュー切替も再現。
+
+## D-020: Gameビュー = 別レンダラー + 再生時の自動タブ切替 (D-013を置換)
+- シーン階層で最初の有効カメラから描画する Game タブを Scene とタブ共有で追加。
+  ▶ で Game へ、⏹ で Scene へ自動切替 (Unityの実挙動)。
+- dockviewは非表示タブをアンマウントするため、描画ループはパネルのマウント状態と独立に
+  エンジンが所有する (Sceneが隠れてもGameが回り続ける)。E2Eでフリーズ回帰を検出して修正済み。
+
+## D-021: カメラ操作をUnity完全互換に変更 (D-009を置換)
+- Alt+左=オービット / 中=パン / ホイール=ズーム / **右ドラッグ+WASDQE=フライスルー**
+  (Shift=高速、フライ中ホイール=速度調整、pointer lock) / **左ドラッグ=矩形選択** (Ctrl/Shift=追加)。
+- フライ中はW/E/R等のツールショートカットを抑止 (Unity同様)。
+- 右ボタンpointerdownでは stopImmediatePropagation で TransformControls への伝播を止める
+  (pointer lock 中の setPointerCapture が例外になるブラウザ仕様への対処)。
+
+## D-022: 方位ギズモ (シーンオリエンテーション) は独自SVGオーバーレイ
+- three公式の ViewHelper は右下固定描画のため不採用。カメラクォータニオンから6軸を投影する
+  SVGオーバーレイを右上に置き、クリックで注視点・距離を維持したまま軸ビューへアニメーション。
+
+## D-023: Shaded/Wireframe ドローモード
+- SceneビューツールバーのShadedドロップダウンで切替。マテリアルの wireframe は
+  userData.baseWireframe (コンポーネント値) と描画モードの OR で決定し、SSoT を汚さない。
+
+## D-024: 細部のUnity互換 (2021.2+実機能の再現)
+- 数値フィールドの数式入力 ("1+2*3" 等、四則演算のみ許可して評価)
+- Light/Camera コンポーネントヘッダの enabled チェックボックス (light.visible / Gameカメラ選定に結線)
+- Hierarchyの可視性トグルを左端ガターへ (Unity 2019.3+のScene Visibility配置)
+- Ctrl+P = Play/Stop
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

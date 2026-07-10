@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AlertTriangle, Info, XCircle } from 'lucide-react'
+import { MenuBar } from './components/MenuBar'
 import { Toolbar } from './components/Toolbar'
 import { DockLayout } from './components/DockLayout'
 import { useShortcuts } from './hooks/useShortcuts'
@@ -24,6 +25,7 @@ export default function App() {
 
   return (
     <div className={`h-full flex flex-col bg-u-window ${playing ? 'u-playing' : ''}`}>
+      <MenuBar />
       <Toolbar />
       <div className="flex-1 min-h-0">
         <DockLayout />

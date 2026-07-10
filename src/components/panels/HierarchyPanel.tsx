@@ -311,7 +311,6 @@ function HierarchyRow({
       data-selected={selected}
       data-hidden={!node.visible}
       data-drop={dropInside ? 'inside' : undefined}
-      style={{ paddingLeft: 4 + row.depth * 14 }}
       draggable={!renaming}
       onMouseDown={(e) => {
         if (e.button === 0 && !renaming) onSelect(e, row.id)
@@ -324,6 +323,23 @@ function HierarchyRow({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
+      {/* 左ガター: Sceneビュー可視性トグル (Unity 2019.3+ の左端の目玉) */}
+      <span className="w-[16px] h-full flex-none flex items-center justify-center border-r border-black/15">
+        {(hover || !node.visible) && !renaming && (
+          <button
+            className="text-u-sub hover:text-u-text"
+            title={node.visible ? 'Disable' : 'Enable'}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              setNodeVisible(row.id, !node.visible)
+            }}
+          >
+            {node.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+          </button>
+        )}
+      </span>
+      <span style={{ width: row.depth * 14 }} className="flex-none" />
       <span
         className="u-foldout"
         data-open={expandedThis}
@@ -338,19 +354,6 @@ function HierarchyRow({
         <RenameInput node={node} />
       ) : (
         <span className="u-tree-label">{node.name}</span>
-      )}
-      {(hover || !node.visible) && !renaming && (
-        <button
-          className="flex-none text-u-sub hover:text-u-text px-0.5"
-          title={node.visible ? 'Disable' : 'Enable'}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            setNodeVisible(row.id, !node.visible)
-          }}
-        >
-          {node.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-        </button>
       )}
     </div>
   )

@@ -13,16 +13,22 @@ npm run build    # 本番ビルド (tsc + vite)
 
 ## 何ができるか
 
-- **Unityデフォルトレイアウト**: 左 Hierarchy / 中央 Scene / 右 Inspector / 下 Project + Console。
+- **メニューバー**: File (New/Open/Save/Import) / Edit (動的Undo・Redo/複製/再生) /
+  GameObject / Component / Window (Reset Layout) / Help
+- **Unityデフォルトレイアウト**: 左 Hierarchy / 中央 Scene+**Game** (タブ) / 右 Inspector / 下 Project + Console。
   dockviewによりタブ化・分割・ドラッグ再配置・リサイズ自由 (Unityのウィンドウドッキング相当)
+- **Game ビュー**: シーン内の最初の有効カメラから描画。**▶ 再生で自動的に Game タブへ切替、⏹ で Scene へ戻る**
 - **Hierarchy**: 右クリック作成メニュー (Create Empty / 3D Object / Light / Camera)、
-  ドラッグ&ドロップで親子変更・並べ替え、Ctrl/Shift複数選択、F2リネーム、目玉トグル、検索
-- **Scene ビュー**: OrbitControls (左ドラッグ=オービット / 右=パン / ホイール=ズーム)、
-  クリック選択 (レイキャスト)、TransformControls ギズモ (Unity軸色 X赤/Y緑/Z青)、
-  1m/10mシェーダグリッド、手続きスカイ、ライト/カメラのアイコン&ヘルパー、カメラプレビュー
-- **Inspector**: Transform (**ラベル横ドラッグで数値スクラブ** — Unityの手触りを再現)、
-  Mesh Filter (プリミティブ切替/GLB参照)、Material (色/テクスチャ/Metallic/Roughness/Opacity/Emission)、
-  Light (Directional/Point/Spot、影)、Camera (投影方式/FOV/クリップ面)、Add Component (検索付き)
+  ドラッグ&ドロップで親子変更・並べ替え、Ctrl/Shift複数選択、F2リネーム、左ガター可視性トグル、検索
+- **Scene ビュー (Unity完全互換操作)**: **Alt+左=オービット / 中=パン / ホイール=ズーム /
+  右ドラッグ+WASDQE=フライスルー (Shift=高速・ホイール=速度) / 左ドラッグ=矩形選択 / クリック=選択**、
+  TransformControls ギズモ (Unity軸色 X赤/Y緑/Z青)、右上の方位ギズモ (クリックで軸ビューへ整列)、
+  Shaded/Wireframe ドローモード、1m/10mシェーダグリッド、手続きスカイ、
+  ライト/カメラのアイコン&ヘルパー、カメラプレビュー
+- **Inspector**: Transform (**ラベル横ドラッグで数値スクラブ** — Unityの手触りを再現、
+  **"1+2*3" のような数式入力**にも対応)、Mesh Filter (プリミティブ切替/GLB参照)、
+  Material (色/テクスチャ/Metallic/Roughness/Opacity/Emission)、
+  Light / Camera (**ヘッダのenabledチェックボックス**付き)、Add Component (検索付き)
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play
@@ -39,6 +45,7 @@ npm run build    # 本番ビルド (tsc + vite)
 | F | 選択にフォーカス | Delete | 削除 |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | F2 | リネーム |
 | Ctrl+S | シーン保存(JSON) | Ctrl+C / V | コピー / ペースト |
+| Ctrl+P | 再生 / 停止 | 右ドラッグ+WASDQE | フライスルー |
 | Ctrl(ドラッグ中) | スナップ (移動1 / 回転15° / スケール0.1) | | |
 
 ## アーキテクチャ

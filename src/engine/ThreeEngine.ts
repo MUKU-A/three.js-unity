@@ -61,6 +61,22 @@ class ThreeEngine {
   private dragBefore: Transform | null = null
   private focusAnim: { fromPos: THREE.Vector3; toPos: THREE.Vector3; fromTgt: THREE.Vector3; toTgt: THREE.Vector3; t: number } | null = null
   private unsubscribe: (() => void) | null = null
+  private orbitTarget = new THREE.Vector3(0, 0, 0)
+
+  /* --- Gameビュー (D-020) --- */
+  private gameRenderer: THREE.WebGLRenderer | null = null
+  private gameMount: HTMLElement | null = null
+  private gameResizeObserver: ResizeObserver | null = null
+
+  /* --- フライスルー (右ドラッグ+WASD, D-021) --- */
+  private fly: { yaw: number; pitch: number; speed: number; pointerId: number } | null = null
+  private readonly flyKeys = new Set<string>()
+  get isFlying(): boolean {
+    return this.fly !== null
+  }
+
+  /* --- 矩形選択 (D-021) --- */
+  private band: { startX: number; startY: number; el: HTMLDivElement; active: boolean; additive: boolean } | null = null
 
   constructor() {
     this.camera.position.set(7, 5, -7)
@@ -82,6 +98,13 @@ class ThreeEngine {
     /* 初期同期 + 購読開始 */
     this.applyState(useEditorStore.getState(), null)
     this.unsubscribe = useEditorStore.subscribe((s, prev) => this.applyState(s, prev))
+
+    /* 描画ループはエンジンが所有する (パネルのマウント状態と独立 — Game/Sceneどちらかだけでも回る) */
+    const loop = () => {
+      this.rafId = requestAnimationFrame(loop)
+      this.tick()
+    }
+    loop()
   }
 
   /* ---------------------------------- mount ---------------------------------- */
@@ -106,10 +129,16 @@ class ThreeEngine {
     this.renderer.domElement.style.outline = 'none'
     this.renderer.domElement.tabIndex = -1
 
-    /* OrbitControls: 左=オービット / 右=パン / ホイール=ズーム (D-009) */
+    /* Unity互換カメラ操作 (D-021):
+       Alt+左=オービット / 中=パン / ホイール=ズーム / 右ドラッグ+WASD=フライスルー / 左ドラッグ=矩形選択 */
     this.orbit = new OrbitControls(this.camera, this.renderer.domElement)
     this.orbit.enableDamping = false
-    this.orbit.target.set(0, 0, 0)
+    this.orbit.target.copy(this.orbitTarget)
+    this.orbit.mouseButtons = {
+      LEFT: null as unknown as THREE.MOUSE, // Altキー押下中のみ ROTATE を割り当てる
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: null as unknown as THREE.MOUSE, // 右は独自フライスルー
+    }
 
     /* TransformControls + Unity軸色 */
     this.gizmo = new TransformControls(this.camera, this.renderer.domElement)
@@ -153,17 +182,9 @@ class ThreeEngine {
     this.resizeObserver.observe(el)
     this.resize()
     this.syncInteractionState(useEditorStore.getState())
-
-    cancelAnimationFrame(this.rafId)
-    const loop = () => {
-      this.rafId = requestAnimationFrame(loop)
-      this.tick()
-    }
-    loop()
   }
 
   private unmountDom() {
-    cancelAnimationFrame(this.rafId)
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
     if (this.gizmo) {
@@ -182,6 +203,54 @@ class ThreeEngine {
 
   unmount() {
     this.unmountDom()
+  }
+
+  /* ---------------- Gameビューのマウント ---------------- */
+
+  mountGame(el: HTMLElement) {
+    if (this.gameMount === el && this.gameRenderer) return
+    this.unmountGame()
+    this.gameMount = el
+    if (!this.gameRenderer) {
+      this.gameRenderer = new THREE.WebGLRenderer({ antialias: true })
+      this.gameRenderer.shadowMap.enabled = true
+      this.gameRenderer.shadowMap.type = THREE.PCFSoftShadowMap
+      this.gameRenderer.setPixelRatio(window.devicePixelRatio)
+    }
+    el.appendChild(this.gameRenderer.domElement)
+    this.gameRenderer.domElement.style.display = 'block'
+    this.gameResizeObserver = new ResizeObserver(() => {
+      if (this.gameMount && this.gameRenderer) {
+        this.gameRenderer.setSize(Math.max(1, this.gameMount.clientWidth), Math.max(1, this.gameMount.clientHeight))
+      }
+    })
+    this.gameResizeObserver.observe(el)
+    this.gameRenderer.setSize(Math.max(1, el.clientWidth), Math.max(1, el.clientHeight))
+  }
+
+  unmountGame() {
+    this.gameResizeObserver?.disconnect()
+    this.gameResizeObserver = null
+    if (this.gameRenderer?.domElement.parentElement) {
+      this.gameRenderer.domElement.parentElement.removeChild(this.gameRenderer.domElement)
+    }
+    this.gameMount = null
+  }
+
+  /* ---------------- 方位ギズモからの軸整列 (Unityのシーンギズモ相当) ---------------- */
+
+  /** 指定方向から注視点を見るようカメラをアニメーション (距離・注視点は維持) */
+  alignToAxis(dir: THREE.Vector3) {
+    if (!this.orbit) return
+    const target = this.orbit.target.clone()
+    const dist = Math.max(0.5, this.camera.position.distanceTo(target))
+    this.focusAnim = {
+      fromPos: this.camera.position.clone(),
+      toPos: target.clone().addScaledVector(dir.clone().normalize(), dist),
+      fromTgt: target.clone(),
+      toTgt: target,
+      t: 0,
+    }
   }
 
   private resize() {
@@ -204,10 +273,28 @@ class ThreeEngine {
       this.syncInteractionState(s)
     }
     if (!prev || s.showGrid !== prev.showGrid) this.grid.visible = s.showGrid
+    if (!prev || s.shadingMode !== prev.shadingMode || s.scene.nodes !== prev.scene.nodes) this.syncShading(s)
     if (!prev || s.focusRequestId !== prev.focusRequestId) {
       if (prev) this.focusSelection(s)
     }
     if (!prev || s.mode !== prev.mode) this.syncPlayMode(s)
+  }
+
+  /** Shaded / Wireframe 描画モード (Sceneビューのドローモード, D-023) */
+  private syncShading(s: EditorState) {
+    const wire = s.shadingMode === 'wireframe'
+    for (const obj of this.objectMap.values()) {
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.isMesh && !m.userData.pickProxy) {
+          const mats = Array.isArray(m.material) ? m.material : [m.material]
+          for (const mat of mats) {
+            const std = mat as THREE.MeshStandardMaterial
+            if (std.isMeshStandardMaterial) std.wireframe = wire || (std.userData.baseWireframe ?? false)
+          }
+        }
+      })
+    }
   }
 
   private reconcileNodes(s: EditorState) {
@@ -385,17 +472,202 @@ class ThreeEngine {
   private downPos: { x: number; y: number; button: number } | null = null
 
   private bindPointer(el: HTMLElement) {
+    el.addEventListener('contextmenu', (e) => e.preventDefault())
+
     el.addEventListener('pointerdown', (e) => {
       this.downPos = { x: e.clientX, y: e.clientY, button: e.button }
+      if (e.button === 2) {
+        /* pointer lock 中の setPointerCapture は例外になるため、
+           同一イベントで後続の TransformControls/OrbitControls ハンドラを走らせない */
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        this.startFly(e)
+      } else if (e.button === 0 && !e.altKey && !this.gizmo?.dragging && !this.gizmo?.axis) {
+        /* 矩形選択の候補 (5px 動いたら発動) */
+        this.band = {
+          startX: e.clientX,
+          startY: e.clientY,
+          el: this.ensureBandEl(),
+          active: false,
+          additive: e.ctrlKey || e.metaKey || e.shiftKey,
+        }
+      }
     })
+
+    el.addEventListener('pointermove', (e) => {
+      if (this.fly && e.pointerId === this.fly.pointerId) {
+        const dx = document.pointerLockElement ? e.movementX : e.movementX || 0
+        const dy = document.pointerLockElement ? e.movementY : e.movementY || 0
+        this.fly.yaw -= dx * 0.0022
+        this.fly.pitch = Math.max(-1.55, Math.min(1.55, this.fly.pitch - dy * 0.0022))
+        this.camera.quaternion.setFromEuler(new THREE.Euler(this.fly.pitch, this.fly.yaw, 0, 'YXZ'))
+        return
+      }
+      if (this.band && this.downPos?.button === 0) {
+        const dx = e.clientX - this.band.startX
+        const dy = e.clientY - this.band.startY
+        if (!this.band.active && Math.hypot(dx, dy) > 5 && !this.gizmo?.dragging && !this.gizmo?.axis) {
+          this.band.active = true
+          this.band.el.style.display = 'block'
+        }
+        if (this.band.active) this.updateBandRect(e.clientX, e.clientY)
+      }
+    })
+
     el.addEventListener('pointerup', (e) => {
       const down = this.downPos
       this.downPos = null
+      if (this.fly && e.button === 2) {
+        this.endFly()
+        return
+      }
+      const band = this.band
+      this.band = null
+      if (band?.active) {
+        band.el.style.display = 'none'
+        this.bandSelect(band, e.clientX, e.clientY)
+        return
+      }
+      if (band) band.el.style.display = 'none'
       if (!down || down.button !== 0 || e.button !== 0) return
-      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return // ドラッグはオービット
+      if (e.altKey) return // Alt+クリックはオービット系
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return
       if (this.gizmo?.dragging || this.gizmo?.axis) return // ギズモ操作中
       this.pick(e)
     })
+
+    /* Alt押下中のみ 左ボタン=オービット (Unity互換) */
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Alt' && this.orbit) {
+        this.orbit.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+        e.preventDefault() // ブラウザのメニューフォーカスを抑止
+      }
+      if (this.fly) {
+        const k = e.key.toLowerCase()
+        if ('wasdqe'.includes(k) && k.length === 1) {
+          this.flyKeys.add(k)
+          e.preventDefault()
+        }
+        if (e.key === 'Shift') this.flyKeys.add('shift')
+      }
+    })
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Alt' && this.orbit) this.orbit.mouseButtons.LEFT = null as unknown as THREE.MOUSE
+      const k = e.key.toLowerCase()
+      this.flyKeys.delete(k)
+      if (e.key === 'Shift') this.flyKeys.delete('shift')
+    })
+    window.addEventListener('blur', () => {
+      this.flyKeys.clear()
+      if (this.orbit) this.orbit.mouseButtons.LEFT = null as unknown as THREE.MOUSE
+    })
+
+    /* フライ中のホイール = 移動速度調整 (Unity互換)。通常時はOrbitControlsのズーム */
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.fly) {
+          e.preventDefault()
+          e.stopImmediatePropagation()
+          this.fly.speed = Math.max(0.5, Math.min(50, this.fly.speed * (e.deltaY < 0 ? 1.15 : 1 / 1.15)))
+        }
+      },
+      { capture: true, passive: false },
+    )
+  }
+
+  /* ---------------- フライスルー ---------------- */
+
+  private startFly(e: PointerEvent) {
+    if (!this.renderer) return
+    const eu = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ')
+    this.fly = { yaw: eu.y, pitch: eu.x, speed: 6, pointerId: e.pointerId }
+    if (this.orbit) this.orbit.enabled = false
+    try {
+      this.renderer.domElement.setPointerCapture(e.pointerId)
+      this.renderer.domElement.requestPointerLock?.()
+    } catch {
+      /* pointer lock 非対応環境 (headless等) では movementX/Y フォールバックで動く */
+    }
+  }
+
+  private endFly() {
+    if (!this.fly) return
+    this.fly = null
+    this.flyKeys.clear()
+    document.exitPointerLock?.()
+    if (this.orbit) {
+      /* オービットの注視点をカメラ前方へ再設定して滑らかに引き継ぐ */
+      const dist = Math.max(1, this.orbit.target.distanceTo(this.camera.position))
+      const fwd = this.camera.getWorldDirection(new THREE.Vector3())
+      this.orbit.target.copy(this.camera.position).addScaledVector(fwd, dist)
+      this.orbit.enabled = true
+    }
+  }
+
+  /* ---------------- 矩形選択 ---------------- */
+
+  private ensureBandEl(): HTMLDivElement {
+    let div = this.mountEl?.querySelector<HTMLDivElement>('[data-band]') ?? null
+    if (!div && this.mountEl) {
+      div = document.createElement('div')
+      div.dataset.band = '1'
+      div.style.cssText =
+        'position:absolute;display:none;border:1px solid #8cb8e8;background:rgba(70,120,180,0.18);pointer-events:none;z-index:20'
+      this.mountEl.appendChild(div)
+    }
+    return div!
+  }
+
+  private updateBandRect(cx: number, cy: number) {
+    if (!this.band || !this.mountEl) return
+    const host = this.mountEl.getBoundingClientRect()
+    const x1 = Math.min(this.band.startX, cx) - host.left
+    const y1 = Math.min(this.band.startY, cy) - host.top
+    const x2 = Math.max(this.band.startX, cx) - host.left
+    const y2 = Math.max(this.band.startY, cy) - host.top
+    Object.assign(this.band.el.style, { left: `${x1}px`, top: `${y1}px`, width: `${x2 - x1}px`, height: `${y2 - y1}px` })
+  }
+
+  /** 矩形内のオブジェクトを選択 (バウンディングボックス角/中心の投影で判定) */
+  private bandSelect(band: NonNullable<typeof this.band>, endX: number, endY: number) {
+    if (!this.renderer) return
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    const x1 = Math.min(band.startX, endX)
+    const y1 = Math.min(band.startY, endY)
+    const x2 = Math.max(band.startX, endX)
+    const y2 = Math.max(band.startY, endY)
+    const st = useEditorStore.getState()
+    const hits: NodeId[] = []
+    const v = new THREE.Vector3()
+    const box = new THREE.Box3()
+    for (const [id, obj] of this.objectMap) {
+      if (!st.scene.nodes[id] || !this.isChainVisible(id, st)) continue
+      box.setFromObject(obj)
+      const points: THREE.Vector3[] = box.isEmpty()
+        ? [obj.getWorldPosition(new THREE.Vector3())]
+        : [
+            box.getCenter(new THREE.Vector3()),
+            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.max.z),
+          ]
+      for (const p of points) {
+        v.copy(p).project(this.camera)
+        if (v.z > 1) continue // カメラ後方
+        const sx = rect.left + ((v.x + 1) / 2) * rect.width
+        const sy = rect.top + ((1 - v.y) / 2) * rect.height
+        if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
+          hits.push(id)
+          break
+        }
+      }
+    }
+    if (band.additive) {
+      const merged = [...new Set([...st.selection, ...hits])]
+      st.select(merged)
+    } else {
+      st.select(hits)
+    }
   }
 
   private pick(e: PointerEvent) {
@@ -572,12 +844,26 @@ class ThreeEngine {
   /* ---------------------------------- loop ---------------------------------- */
 
   private tick() {
-    if (!this.renderer || !this.mountEl) return
     const st = useEditorStore.getState()
     const dt = this.clock.getDelta()
 
     if (st.mode === 'play') {
       for (const mixer of this.mixers.values()) mixer.update(dt)
+    }
+
+    /* フライスルー移動 (右ドラッグ中 WASDQE / Shift=高速 / ホイール=速度) */
+    if (this.fly) {
+      const k = this.flyKeys
+      const move = new THREE.Vector3(
+        (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0),
+        (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0),
+        (k.has('s') ? 1 : 0) - (k.has('w') ? 1 : 0),
+      )
+      if (move.lengthSq() > 0) {
+        move.normalize().multiplyScalar(this.fly.speed * (k.has('shift') ? 4 : 1) * dt)
+        move.applyQuaternion(this.camera.quaternion)
+        this.camera.position.add(move)
+      }
     }
 
     if (this.focusAnim && this.orbit) {
@@ -588,7 +874,7 @@ class ThreeEngine {
       if (this.focusAnim.t >= 1) this.focusAnim = null
     }
 
-    this.orbit?.update()
+    if (!this.fly) this.orbit?.update()
     /* グリッド/空をカメラ追従 (グリッド模様はワールド座標基準なので継ぎ目なく無限に見える) */
     this.grid.position.set(Math.round(this.camera.position.x / 10) * 10, 0, Math.round(this.camera.position.z / 10) * 10)
     this.sky.position.copy(this.camera.position)
@@ -596,69 +882,107 @@ class ThreeEngine {
     ;(this.lightHelper as unknown as { update?: () => void })?.update?.()
     this.cameraHelper?.update()
 
-    const w = this.mountEl.clientWidth
-    const h = this.mountEl.clientHeight
-    this.renderer.setViewport(0, 0, w, h)
-    this.renderer.setScissorTest(false)
-    this.renderer.render(this.scene, this.camera)
-
-    /* カメラ選択時のプレビュー (Unity の Camera Preview 相当) */
-    const act = activeNodeId(st)
-    const actObj = act ? this.objectMap.get(act) : null
-    const previewCam = actObj?.userData.parts.camera
-    if (previewCam && act && getComponent(st.scene.nodes[act], 'camera')) {
-      const pw = Math.max(120, Math.floor(w * 0.24))
-      const ph = Math.floor((pw * 9) / 16)
-      const px = w - pw - 12
-      const py = 12
-      if ((previewCam as THREE.PerspectiveCamera).isPerspectiveCamera) {
-        const pc = previewCam as THREE.PerspectiveCamera
-        pc.aspect = pw / ph
-        pc.updateProjectionMatrix()
-      }
-      const helperWasVisible = this.cameraHelper?.visible ?? false
-      if (this.cameraHelper) this.cameraHelper.visible = false
-      const gizmoHelper = this.gizmo?.getHelper()
-      const gizmoWasVisible = gizmoHelper?.visible ?? false
-      if (gizmoHelper) gizmoHelper.visible = false
-      const gridWas = this.grid.visible
-      this.grid.visible = false
-      const boxesWere: boolean[] = []
-      for (const b of this.selectionBoxes.values()) {
-        boxesWere.push(b.visible)
-        b.visible = false
-      }
-      const decosWere: boolean[] = []
-      for (const d of this.decorations.values()) {
-        decosWere.push(d.sprite.visible)
-        d.sprite.visible = false
-      }
-
-      /* 空はプレビューカメラ位置へ移して描く (BackSide球の内側に入れる) */
-      const skyPos = this.sky.position.clone()
-      previewCam.getWorldPosition(this.sky.position)
-      this.renderer.setScissorTest(true)
-      this.renderer.setScissor(px, py, pw, ph)
-      this.renderer.setViewport(px, py, pw, ph)
-      this.renderer.render(this.scene, previewCam)
+    /* Sceneビュー (マウント中のみ) */
+    if (this.renderer && this.mountEl) {
+      const w = this.mountEl.clientWidth
+      const h = this.mountEl.clientHeight
+      this.renderer.setViewport(0, 0, w, h)
       this.renderer.setScissorTest(false)
-      this.sky.position.copy(skyPos)
+      this.renderer.render(this.scene, this.camera)
 
-      if (this.cameraHelper) this.cameraHelper.visible = helperWasVisible
-      if (gizmoHelper) gizmoHelper.visible = gizmoWasVisible
-      this.grid.visible = gridWas
-      let i = 0
-      for (const b of this.selectionBoxes.values()) b.visible = boxesWere[i++]
-      i = 0
-      for (const d of this.decorations.values()) d.sprite.visible = decosWere[i++]
+      /* カメラ選択時のプレビュー (Unity の Camera Preview 相当) */
+      const act = activeNodeId(st)
+      const actObj = act ? this.objectMap.get(act) : null
+      const previewCam = actObj?.userData.parts.camera
+      if (previewCam && act && getComponent(st.scene.nodes[act], 'camera')) {
+        const pw = Math.max(120, Math.floor(w * 0.24))
+        const ph = Math.floor((pw * 9) / 16)
+        this.renderClean(this.renderer, previewCam, { x: w - pw - 12, y: 12, w: pw, h: ph })
+      }
+    }
+
+    /* Gameビュー: 最初の有効なカメラノードから描画 (D-020) */
+    if (this.gameRenderer && this.gameMount) {
+      const gw = Math.max(1, this.gameMount.clientWidth)
+      const gh = Math.max(1, this.gameMount.clientHeight)
+      const gameCam = this.findGameCamera(st)
+      if (gameCam) {
+        this.renderClean(this.gameRenderer, gameCam, { x: 0, y: 0, w: gw, h: gh })
+      } else {
+        this.gameRenderer.setClearColor(0x1e1e1e)
+        this.gameRenderer.clear()
+      }
     }
   }
 
+  /** シーン階層順で最初の有効カメラ (Unity の Game ビューカメラ相当) */
+  private findGameCamera(st: EditorState): THREE.Camera | null {
+    const walk = (ids: NodeId[]): THREE.Camera | null => {
+      for (const id of ids) {
+        const node = st.scene.nodes[id]
+        if (!node || !node.visible) continue
+        const comp = getComponent(node, 'camera')
+        if (comp && comp.enabled !== false) {
+          const cam = this.objectMap.get(id)?.userData.parts.camera
+          if (cam) return cam
+        }
+        const found = walk(node.childrenIds)
+        if (found) return found
+      }
+      return null
+    }
+    return walk(st.scene.rootIds)
+  }
+
+  /** エディタ専用表示 (グリッド/ギズモ/ヘルパー/アイコン/選択枠) を隠してカメラ視点を描画 */
+  private renderClean(
+    renderer: THREE.WebGLRenderer,
+    camera: THREE.Camera,
+    vp: { x: number; y: number; w: number; h: number },
+  ) {
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+      const pc = camera as THREE.PerspectiveCamera
+      pc.aspect = vp.w / vp.h
+      pc.updateProjectionMatrix()
+    }
+    const hidden: Array<{ o: { visible: boolean }; was: boolean }> = []
+    const hide = (o: { visible: boolean } | null | undefined) => {
+      if (o) {
+        hidden.push({ o, was: o.visible })
+        o.visible = false
+      }
+    }
+    hide(this.cameraHelper)
+    hide(this.lightHelper as unknown as { visible: boolean } | null)
+    hide(this.gizmo?.getHelper())
+    hide(this.grid)
+    for (const b of this.selectionBoxes.values()) hide(b)
+    for (const d of this.decorations.values()) hide(d.sprite)
+
+    const skyPos = this.sky.position.clone()
+    camera.getWorldPosition(this.sky.position)
+    const isSelf = renderer === this.renderer
+    if (isSelf) {
+      renderer.setScissorTest(true)
+      renderer.setScissor(vp.x, vp.y, vp.w, vp.h)
+    }
+    renderer.setViewport(vp.x, vp.y, vp.w, vp.h)
+    renderer.render(this.scene, camera)
+    if (isSelf) renderer.setScissorTest(false)
+    this.sky.position.copy(skyPos)
+
+    for (const { o, was } of hidden) o.visible = was
+  }
+
   dispose() {
+    cancelAnimationFrame(this.rafId)
     this.unsubscribe?.()
     this.unmountDom()
+    this.unmountGame()
     this.renderer?.dispose()
     this.renderer = null
+    this.gameRenderer?.dispose()
+    this.gameRenderer = null
   }
 }
 

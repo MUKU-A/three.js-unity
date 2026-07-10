@@ -8,6 +8,7 @@
 import { create } from 'zustand'
 import type { AssetMeta, Component, NodeId, SceneGraph, SceneNode, Transform } from '../types/scene'
 import { defaultCamera, defaultLight, defaultTransform, newId, vec3 } from '../types/scene'
+import { clearAssets } from '../engine/assets'
 import * as ops from './sceneOps'
 
 /* ---------------------------------- Command ---------------------------------- */
@@ -33,6 +34,7 @@ let logId = 0
 
 export type Tool = 'move' | 'rotate' | 'scale'
 export type EditorMode = 'edit' | 'play' | 'paused'
+export type ShadingMode = 'shaded' | 'wireframe'
 
 interface PlaySnapshot {
   scene: SceneGraph
@@ -53,6 +55,7 @@ export interface EditorState {
   logs: LogEntry[]
   clearOnPlay: boolean
   showGrid: boolean
+  shadingMode: ShadingMode
   /** F キー: インクリメントで engine にフォーカス要求を伝える */
   focusRequestId: number
   clipboard: SceneNode[][] // コピーされたサブツリー群 (各要素の[0]がルート)
@@ -87,6 +90,9 @@ export interface EditorState {
   setTool(t: Tool): void
   setTransformSpace(s: 'local' | 'world'): void
   setShowGrid(v: boolean): void
+  setShadingMode(m: ShadingMode): void
+  /** File > New Scene: 初期シーンへ戻す (アセット・履歴もクリア) */
+  newScene(): void
   requestFocus(): void
   setClipboard(subtrees: SceneNode[][]): void
   setAssets(assets: AssetMeta[]): void
@@ -150,6 +156,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   ],
   clearOnPlay: true,
   showGrid: true,
+  shadingMode: 'shaded',
   focusRequestId: 0,
   clipboard: [],
 
@@ -229,6 +236,25 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   },
   setShowGrid(v) {
     set({ showGrid: v })
+  },
+  setShadingMode(m) {
+    set({ shadingMode: m })
+  },
+  newScene() {
+    const s = get()
+    if (s.mode !== 'edit') s.stop()
+    clearAssets()
+    set({
+      scene: initialScene(),
+      assets: [],
+      selection: [],
+      expanded: {},
+      undoStack: [],
+      redoStack: [],
+      renamingId: null,
+      playSnapshot: null,
+    })
+    get().log('info', 'New scene created')
   },
   requestFocus() {
     set((s) => ({ focusRequestId: s.focusRequestId + 1 }))

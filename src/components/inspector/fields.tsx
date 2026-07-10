@@ -16,6 +16,23 @@ const fmt = (v: number) => {
   return String(r)
 }
 
+/**
+ * Unity 2021.2+ の数値フィールド数式入力を再現: "1+2*3" "(4-1)/2" 等の四則演算を受け付ける。
+ * 数字と + - * / ( ) . 空白のみ許可した上で評価する。
+ */
+export function evalNumericExpression(text: string): number {
+  const t = text.replace(',', '.').trim()
+  const direct = Number(t)
+  if (t !== '' && Number.isFinite(direct)) return direct
+  if (!/^[0-9+\-*/(). ]+$/.test(t) || !/[0-9]/.test(t)) return NaN
+  try {
+    const v = new Function(`"use strict"; return (${t});`)() as unknown
+    return typeof v === 'number' && Number.isFinite(v) ? v : NaN
+  } catch {
+    return NaN
+  }
+}
+
 /* ---------------------------------- 行レイアウト ---------------------------------- */
 
 /** ラベル列 ~40% : フィールド列 (UNITY_UI_RESEARCH.md §5) */
@@ -98,10 +115,11 @@ export function NumberInput({
 
   const commitTyped = () => {
     if (text === null) return
-    const parsed = Number(text.replace(',', '.'))
+    const parsed = evalNumericExpression(text) // "1+2*3" 等の数式も許容 (Unity 2021.2+)
     setText(null)
     if (Number.isFinite(parsed) && parsed !== beforeRef.current) {
       onCommit(beforeRef.current, parsed)
+      if (ref.current) ref.current.value = fmt(parsed)
     } else {
       /* 無効入力は元値へ戻す */
       onTransient(beforeRef.current)

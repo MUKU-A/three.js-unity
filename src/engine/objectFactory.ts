@@ -80,6 +80,7 @@ function applyMaterialProps(mat: THREE.MeshStandardMaterial, comp: MaterialCompo
   mat.emissive.set(comp.emissive)
   mat.emissiveIntensity = comp.emissiveIntensity
   mat.wireframe = comp.wireframe
+  mat.userData.baseWireframe = comp.wireframe // Sceneビューのワイヤーフレーム表示と区別するための基底値
   const tex = getAsset(comp.textureAssetId)?.texture ?? null
   if (mat.map !== tex) {
     mat.map = tex
@@ -160,6 +161,7 @@ function buildLightPart(comp: LightComponent): { light: THREE.Light; target?: TH
 }
 
 function applyLightProps(light: THREE.Light, comp: LightComponent) {
+  light.visible = comp.enabled !== false
   light.color.set(comp.color)
   light.intensity = comp.intensity
   light.castShadow = comp.castShadow
@@ -312,6 +314,7 @@ export function updateContainer(container: NodeContainer, node: SceneNode, prev:
       parts.lightTarget = target
       container.add(light)
       if (target) container.add(target)
+      applyLightProps(light, lightComp)
     } else if (parts.light) {
       applyLightProps(parts.light, lightComp)
     }
