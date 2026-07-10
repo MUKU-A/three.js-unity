@@ -1,111 +1,403 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import 'tailwindcss';
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+/*
+ * Unity風 独自ダークテーマ (UNITY_UI_RESEARCH.md §2/§3 の値)
+ * ※Unityの素材は使用していない。観察に基づく等価な独自実装。
+ */
+@theme {
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --color-u-window: #383838;
+  --color-u-panel: #383838;
+  --color-u-list: #303030;
+  --color-u-list-alt: #2e2e2e;
+  --color-u-dark: #2a2a2a;
+  --color-u-darker: #282828;
+  --color-u-field: #2a2a2a;
+  --color-u-field-border: #212121;
+  --color-u-border: #232323;
+  --color-u-window-border: #242424;
+  --color-u-header: #3e3e3e;
+  --color-u-header-hover: #474747;
+  --color-u-toolbar: #3c3c3c;
+  --color-u-tabbar: #282828;
+  --color-u-tab-idle: #2d2d2d;
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --color-u-text: #d2d2d2;
+  --color-u-label: #c4c4c4;
+  --color-u-sub: #909090;
+  --color-u-disabled: #5d5d5d;
+
+  --color-u-select: #2c5d87;
+  --color-u-select-idle: #4d4d4d;
+  --color-u-accent: #3c7ebf;
+  --color-u-focus: #3a79bb;
+  --color-u-btn: #585858;
+  --color-u-btn-hover: #676767;
+  --color-u-btn-press: #46607c;
+  --color-u-btn-border: #303030;
+
+  --color-u-error: #ff6b6b;
+  --color-u-warn: #f4bc02;
+  --color-u-link: #4c7eff;
+  --color-u-play-tint: #405060;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+/* ---------- base ---------- */
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
+html,
+body,
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-u-text);
+  background: var(--color-u-window);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+/* Unity風スリムスクロールバー */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #5f5f5f transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #5f5f5f;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+/* ---------- Unity共通部品 ---------- */
+
+/* 入力フィールド */
+.u-input {
+  background: var(--color-u-field);
+  border: 1px solid var(--color-u-field-border);
+  border-radius: 2px;
+  color: var(--color-u-text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  height: 19px;
+  padding: 0 4px;
+  outline: none;
+  min-width: 0;
+  width: 100%;
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+.u-input:focus {
+  border-color: var(--color-u-focus);
 }
-p {
-  margin: 0;
+.u-input::selection {
+  background: var(--color-u-select);
 }
 
-code,
-.counter {
-  font-family: var(--mono);
+/* ボタン */
+.u-btn {
+  background: var(--color-u-btn);
+  border: 1px solid var(--color-u-btn-border);
+  border-radius: 3px;
+  color: var(--color-u-text);
+  font-size: 12px;
+  height: 20px;
+  padding: 0 10px;
   display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: default;
+}
+.u-btn:hover {
+  background: var(--color-u-btn-hover);
+}
+.u-btn:active,
+.u-btn[data-active='true'] {
+  background: var(--color-u-btn-press);
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* ツールバーのアイコンボタン */
+.u-toolbtn {
+  width: 28px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  color: var(--color-u-label);
+  cursor: default;
+}
+.u-toolbtn:hover {
+  background: var(--color-u-btn-hover);
+}
+.u-toolbtn[data-active='true'] {
+  background: var(--color-u-btn-press);
+  border-color: var(--color-u-btn-border);
+  color: #fff;
+}
+
+/* チェックボックス */
+.u-check {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--color-u-field);
+  border: 1px solid var(--color-u-field-border);
+  border-radius: 2px;
+  display: inline-block;
+  position: relative;
+  cursor: default;
+  flex: none;
+}
+.u-check:checked {
+  background: var(--color-u-accent);
+  border-color: var(--color-u-accent);
+}
+.u-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.u-check:focus-visible {
+  outline: 1px solid var(--color-u-focus);
+}
+
+/* スライダー */
+.u-slider {
+  appearance: none;
+  height: 2px;
+  background: #5a5a5a;
+  border-radius: 1px;
+  outline: none;
+  flex: 1;
+  min-width: 30px;
+}
+.u-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #999;
+  border: 1px solid #1f1f1f;
+}
+.u-slider::-webkit-slider-thumb:hover {
+  background: #bbb;
+}
+
+/* 数値ラベルの横ドラッグ(スクラブ) */
+.u-scrub {
+  cursor: ew-resize;
+}
+
+/* コンテキストメニュー */
+.u-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 190px;
+  background: #333333;
+  border: 1px solid #1c1c1c;
+  border-radius: 3px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  padding: 3px 0;
+  font-size: 12px;
+}
+.u-menu-item {
+  padding: 3px 22px 3px 24px;
+  position: relative;
+  white-space: nowrap;
+  color: var(--color-u-text);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.u-menu-item:hover:not([data-disabled='true']) {
+  background: var(--color-u-select);
+  color: #fff;
+}
+.u-menu-item[data-disabled='true'] {
+  color: var(--color-u-disabled);
+}
+.u-menu-sep {
+  height: 1px;
+  background: #1f1f1f;
+  margin: 3px 1px;
+}
+.u-menu-shortcut {
+  color: var(--color-u-sub);
+  font-size: 11px;
+}
+
+/* Inspector コンポーネントヘッダ */
+.u-comp-header {
+  height: 22px;
+  background: var(--color-u-header);
+  border-bottom: 1px solid var(--color-u-border);
+  border-top: 1px solid #454545;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.u-comp-header:hover {
+  background: var(--color-u-header-hover);
+}
+
+/* 折りたたみ三角 */
+.u-foldout {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-u-sub);
+  flex: none;
+  transition: transform 80ms;
+}
+.u-foldout[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+/* ---------- dockview Unityテーマ ---------- */
+
+.dockview-theme-unity {
+  --dv-group-view-background-color: var(--color-u-panel);
+  --dv-tabs-and-actions-container-background-color: var(--color-u-tabbar);
+  --dv-tabs-and-actions-container-height: 25px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-u-panel);
+  --dv-activegroup-visiblepanel-tab-color: #e8e8e8;
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--color-u-tab-idle);
+  --dv-activegroup-hiddenpanel-tab-color: #9a9a9a;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-u-panel);
+  --dv-inactivegroup-visiblepanel-tab-color: #b8b8b8;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--color-u-tab-idle);
+  --dv-inactivegroup-hiddenpanel-tab-color: #8a8a8a;
+  --dv-separator-border: var(--color-u-window-border);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--color-u-accent);
+  --dv-drag-over-background-color: rgba(44, 93, 135, 0.35);
+  --dv-drag-over-border-color: var(--color-u-accent);
+  --dv-tab-divider-color: var(--color-u-window-border);
+  --dv-tab-border-radius: 0;
+  --dv-tab-margin: 0;
+  --dv-paneview-header-border-color: var(--color-u-border);
+  --dv-icon-hover-background-color: var(--color-u-btn-hover);
+  --dv-floating-box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dv-context-menu-background-color: #333333;
+  --dv-context-menu-color: var(--color-u-text);
+  --dv-scrollbar-background-color: #5f5f5f;
+}
+
+/* タブ上部を角ばらせ、Unityのタブ形状(上辺のみ角丸)に */
+.dockview-theme-unity .dv-tab {
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  padding: 0 !important;
+  min-width: 60px;
+}
+.dockview-theme-unity .dv-react-tab {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* パネル本体との境界 */
+.dockview-theme-unity .dv-groupview {
+  border: 1px solid var(--color-u-window-border);
+  box-sizing: border-box;
+}
+
+/* ---------- Hierarchy 行 ---------- */
+
+.u-tree-row {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  white-space: nowrap;
+  color: var(--color-u-text);
+}
+.u-tree-row:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+.u-tree-row[data-selected='true'] {
+  background: var(--color-u-select);
+  color: #fff;
+}
+.u-tree-row[data-selected='true'][data-unfocused='true'] {
+  background: var(--color-u-select-idle);
+}
+.u-tree-row[data-hidden='true'] .u-tree-label {
+  opacity: 0.45;
+}
+.u-tree-row[data-drop='inside'] {
+  outline: 1px solid var(--color-u-accent);
+  outline-offset: -1px;
+}
+.u-tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* DnD挿入線 */
+.u-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-u-accent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ---------- Console ---------- */
+
+.u-log-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-bottom: 1px solid #313131;
+  min-height: 24px;
+}
+.u-log-row:nth-child(odd) {
+  background: var(--color-u-list-alt);
+}
+.u-log-row[data-selected='true'] {
+  background: var(--color-u-select);
+}
+
+/* ---------- 再生モードのティント (D-013) ---------- */
+
+.u-playing .u-tint-target {
+  background-color: color-mix(in srgb, var(--color-u-toolbar) 78%, var(--color-u-play-tint));
+}
+
+/* 数値ドラッグ中のグローバルカーソル固定 */
+body[data-scrubbing='true'] {
+  cursor: ew-resize !important;
+}
+body[data-scrubbing='true'] * {
+  cursor: ew-resize !important;
 }
