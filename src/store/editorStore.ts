@@ -535,6 +535,22 @@ export function cmdRemoveComponent(id: NodeId, componentIndex: number): Command 
   }
 }
 
+/**
+ * グラフ全置換コマンド (Prefab Apply/Revert のような複数サブツリーの一括差し替え用, D-029)。
+ * before/after のイミュータブル参照を保持するだけなのでメモリ・実装ともに安全。
+ */
+export function cmdReplaceGraph(before: SceneGraph, after: SceneGraph, name: string): Command {
+  return {
+    name,
+    apply() {
+      useEditorStore.setState((s) => ({ scene: after, selection: s.selection.filter((id) => after.nodes[id]) }))
+    },
+    revert() {
+      useEditorStore.setState((s) => ({ scene: before, selection: s.selection.filter((id) => before.nodes[id]) }))
+    },
+  }
+}
+
 /** 選択中ノード群のうち、選択に祖先が含まれるものを除外 */
 export function topmostOnly(ids: NodeId[]): NodeId[] {
   const g = st().scene

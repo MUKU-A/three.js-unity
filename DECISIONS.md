@@ -149,6 +149,22 @@
   Animatorステートマシンは未実装 (ROADMAP P2) だが、スクリプトからの切替で大半のユースを充足。
 - **FBX/OBJ**: three公式ローダーを遅延importし、GLBと同じ ModelAsset 形に正規化して取り込む。
 
+## D-029: Prefabシステム v1 = アセット化テンプレート + 全体置換のApply/Revert
+- prefabはアセット (JSONバイナリ) としてレジストリに保存し、既存のbase64内蔵シリアライズに
+  自動的に乗る (追加の保存機構ゼロ)。ノードはルートに prefabId を持ちHierarchyで青表示 (Unity互換)。
+- **Apply**: インスタンスの内容をアセットへ書き戻し、他インスタンスを一括再構築。
+  root の transform/name/visible はインスタンス毎の値として維持 (Unityの意味論)。
+  シーン側の伝播は cmdReplaceGraph (グラフ全置換コマンド) で **1 Undo**。
+  アセット更新自体はUnity同様Undo対象外。
+- **Revert**: インスタンスをテンプレートから再構築 (root transform等は維持)。**Unpack**: リンク解除。
+- v1の割り切り: プロパティ単位の差分オーバーライド管理はせず全体置換。
+  再構築でノードIDが変わる (選択はcmdReplaceGraphがフィルタ)。Nested/Variant は P2。
+
+## D-030: スクリプトライフサイクルの完全順序
+- onAwake → onEnable → onStart を「全インスタンスごとにフェーズ順」で実行 (Unityの
+  全Awake→全Start保証を再現)。破棄/停止時は onDisable → onDestroy。
+- 再生中の enabled/visible トグルによる OnEnable/OnDisable 発火は未対応 (制限として明記)。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

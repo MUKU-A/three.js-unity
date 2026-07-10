@@ -892,7 +892,12 @@ class ThreeEngine {
       const st = useEditorStore.getState()
       const point = this.dropPoint(e)
 
-      if (isModelType(asset.meta.type)) {
+      if (asset.meta.type === 'prefab') {
+        void import('../store/actions').then((acts) => {
+          acts.instantiatePrefab(assetId, { x: round3(point.x), y: round3(point.y), z: round3(point.z) })
+          st.log('info', `Instantiated prefab '${asset.meta.name}'`)
+        })
+      } else if (isModelType(asset.meta.type)) {
         const node = makeGlbNode(assetId, asset.meta.name)
         node.transform.position = { x: round3(point.x), y: round3(point.y), z: round3(point.z) }
         st.execute(cmdAddObject([node], null))

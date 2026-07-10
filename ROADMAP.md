@@ -5,9 +5,30 @@
 
 ## レビュー指摘の事実確認
 
-指摘のうち以下は**事実誤認**だったため対応不要:
+外部レビューはコードを完読せずに書かれることがあるため、事実誤認を記録しておく
+(いずれもE2Eテストで動作検証済みの機能):
+
+**レビュー第1弾の誤認:**
 - 「Consoleウィンドウ・ProjectウィンドウのUIが見当たらない」→ `ConsolePanel.tsx` / `ProjectPanel.tsx`
   として実装済みで、フィルタ・Clear on Play・インポート・DnD配置までE2E検証済み。
+
+**レビュー第3弾の誤認 (指摘時点で既に実装済みだったもの):**
+- 「完全なUndo/Redoが不足」→ 初回コミットから全編集がCommandパターン経由 (D-003/D-005)。
+  追加/削除/複製/親子変更/プロパティ/ギズモドラッグ=1Undo/Prefab Applyまで検証済み。
+- 「Play/Editの厳密な分離と状態復元が鍵」→ D-006で初期実装済み。スナップショット+完全復元は
+  ランタイムInstantiate/Destroyを含めてE2E検証済み。
+- 「コルーチンが不足」→ ctx.startCoroutine (generator + yield秒) 実装済み (D-028)。
+- 「ライフサイクル不足 (FixedUpdate/LateUpdate/OnDestroy等)」→ 大半実装済み。
+  残っていた Awake/OnEnable/OnDisable は今回追加し全順序を再現 (D-030)。
+- 「コライダー枠・ライト範囲等のギズモ描画がない」→ コライダー緑ワイヤーフレーム、
+  Point/Spotの範囲ヘルパー、カメラFrustum、選択ボックスすべて実装済み。
+  (ユーザースクリプトからの OnDrawGizmos 相当APIは未実装 → P2)
+- 「GUIDによる参照解決がない」→ アセットは生成IDで参照しており、名前変更でリンクは切れない。
+  未実装なのは .meta 相当のインポート設定のみ。
+- 「グリッドスナップがない」→ Ctrl押下スナップ (移動1/回転15°/スケール0.1) 実装済み。
+  頂点スナップ(V)・整列ツールは未実装 → P2。
+- 「スクリプト変数のリアルタイム監視ができない」→ props (シリアライズ対象フィールド相当) は
+  SSoT管理のため再生中もInspectorでライブ表示・編集可能。ローカル変数の監視は対象外。
 
 ## 対応済み (このリポジトリで実装済み)
 
@@ -27,13 +48,14 @@
 | 3. 対応フォーマット | ✅ GLB/GLTF + **FBX / OBJ** (モデル)、PNG/JPG/WebP (テクスチャ)。オーディオは未対応 (下記) |
 | 3. Normal Map / Tiling / Offset | ✅ MaterialComponentに追加、マテリアル毎テクスチャ複製で共有汚染なし |
 | (前回対応) Gameビュー/メニューバー/Unity操作系 | ✅ D-019〜D-024 |
+| **Prefabシステム v1** | ✅ 作成/インスタンス化/Apply(全インスタンス伝播・1Undo)/Revert(root transform維持)/Unpack、Hierarchy青表示、JSON永続化 (D-029)。差分オーバーライド・Nested/Variantは残 (P2) |
+| ライフサイクル完全化 | ✅ onAwake → onEnable → onStart → (Update系) → onDisable → onDestroy の厳密順序 (D-030) |
 
 ## 未対応 — 優先度順の実装計画
 
 ### P1 (次のイテレーション候補)
-- **Prefabシステム**: サブツリーをアセット化し、インスタンスへの変更同期・オーバーライドを管理。
-  データモデル案: `assets` に `prefab` 型を追加し、ノードに `prefabId`+`overrides` を持たせる。
-  ※ ctx.instantiate は実装済みなので「テンプレのアセット化と同期」だけが残タスク。
+- **Prefab v2**: プロパティ単位の差分オーバーライド (現状は全体置換のv1)、Nested Prefab、Variant、
+  差分のApply/Revert個別選択UI。
 - **オーディオ**: AudioSource/AudioListenerコンポーネント (THREE.PositionalAudio)、.mp3/.wavインポート。
 - **URLベースのアセット管理**: base64内蔵JSON (D-011) はプロトタイプ用。Supabase Storage等の
   参照型へ移行し、`SerializedScene.assets[].url` を許可する (後方互換のまま拡張可能な構造は確保済み)。

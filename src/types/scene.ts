@@ -167,6 +167,8 @@ export interface SceneNode {
   childrenIds: NodeId[]
   transform: Transform
   components: Component[]
+  /** プレハブインスタンスのルートに付くアセット参照 (D-029)。Hierarchyで青表示 */
+  prefabId?: string | null
 }
 
 export interface SceneGraph {
@@ -177,7 +179,7 @@ export interface SceneGraph {
 
 /* ---------------------------------- Assets ---------------------------------- */
 
-export type AssetType = 'glb' | 'texture' | 'fbx' | 'obj'
+export type AssetType = 'glb' | 'texture' | 'fbx' | 'obj' | 'prefab'
 
 /** ストアに置くメタデータ。バイナリ本体は engine/assetRegistry が保持 */
 export interface AssetMeta {
@@ -222,7 +224,7 @@ export const defaultMaterial = (): MaterialComponent => ({
 })
 
 export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。使えるフック:
-//   onStart(ctx) / onUpdate(ctx, dt) / onFixedUpdate(ctx, dt) / onLateUpdate(ctx, dt) / onDestroy(ctx)
+//   onAwake / onEnable / onStart / onUpdate / onFixedUpdate / onLateUpdate / onDisable / onDestroy
 //   onCollisionEnter/Exit(ctx, other) / onTriggerEnter/Exit(ctx, other)
 // ctx API: node.position|rotation|scale / find(name) / instantiate(src, pos) / destroy(target?)
 //          physics.raycast(origin, dir, maxDist) / startCoroutine(function*(){ yield 秒 })

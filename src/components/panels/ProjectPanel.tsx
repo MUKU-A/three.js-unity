@@ -3,9 +3,10 @@
  * RunPod/ComfyUI パイプライン等で生成した GLB の取り込み口 (Import ボタン / ここへの直接ドロップ)。
  */
 import { useRef, useState } from 'react'
-import { FileUp, Image as ImageIcon, Package, Trash2 } from 'lucide-react'
+import { Box, FileUp, Image as ImageIcon, Package, Trash2 } from 'lucide-react'
 import { useEditorStore, cmdAddObject, makeGlbNode } from '../../store/editorStore'
 import { getAsset, importFile, removeAsset } from '../../engine/assets'
+import { instantiatePrefab } from '../../store/actions'
 import { useContextMenu } from '../common/ContextMenu'
 
 export function ProjectPanel() {
@@ -99,7 +100,11 @@ export function ProjectPanel() {
                       label: 'Add to Scene',
                       disabled: a.type === 'texture',
                       onClick: () => {
-                        st().execute(cmdAddObject([makeGlbNode(a.id, a.name)], null))
+                        if (a.type === 'prefab') {
+                          instantiatePrefab(a.id)
+                        } else {
+                          st().execute(cmdAddObject([makeGlbNode(a.id, a.name)], null))
+                        }
                         st().log('info', `Placed '${a.name}' in scene`)
                       },
                     },
@@ -159,6 +164,8 @@ function AssetTile({
           <img src={data.objectUrl} className="w-full h-full object-cover" draggable={false} />
         ) : meta.type === 'texture' ? (
           <ImageIcon size={22} className="text-u-sub" />
+        ) : meta.type === 'prefab' ? (
+          <Box size={24} className="text-[#8ab8e8]" />
         ) : (
           <Package size={24} className="text-[#8fb6d9]" />
         )}

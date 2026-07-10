@@ -126,10 +126,13 @@ export function makeNodeProxy(id: NodeId): NodeProxy {
 type Hook<A extends unknown[]> = ((...args: A) => void) | null
 
 export interface CompiledScript {
+  onAwake: Hook<[ScriptCtx]>
+  onEnable: Hook<[ScriptCtx]>
   onStart: Hook<[ScriptCtx]>
   onUpdate: Hook<[ScriptCtx, number]>
   onFixedUpdate: Hook<[ScriptCtx, number]>
   onLateUpdate: Hook<[ScriptCtx, number]>
+  onDisable: Hook<[ScriptCtx]>
   onDestroy: Hook<[ScriptCtx]>
   onCollisionEnter: Hook<[ScriptCtx, NodeProxy]>
   onCollisionExit: Hook<[ScriptCtx, NodeProxy]>
@@ -139,10 +142,13 @@ export interface CompiledScript {
 }
 
 const HOOK_NAMES = [
+  'onAwake',
+  'onEnable',
   'onStart',
   'onUpdate',
   'onFixedUpdate',
   'onLateUpdate',
+  'onDisable',
   'onDestroy',
   'onCollisionEnter',
   'onCollisionExit',
@@ -223,6 +229,9 @@ export class ScriptRuntime {
     for (const id in state.scene.nodes) {
       started += this.createInstancesForNode(id, false)
     }
+    /* Unityの実行順: 全Awake → 全OnEnable → 全Start */
+    for (const inst of this.instances) this.safeCall(inst, 'onAwake')
+    for (const inst of this.instances) this.safeCall(inst, 'onEnable')
     for (const inst of this.instances) this.safeCall(inst, 'onStart')
     if (started > 0) state.log('info', `${started} script(s) started`)
   }
@@ -243,13 +252,18 @@ export class ScriptRuntime {
       this.createInstancesForNode(id, true)
       created.push(...this.instances.slice(before))
     }
+    for (const inst of created) this.safeCall(inst, 'onAwake')
+    for (const inst of created) this.safeCall(inst, 'onEnable')
     for (const inst of created) this.safeCall(inst, 'onStart')
   }
 
-  /** Destroy されたノード群のスクリプトへ onDestroy を配送して除去 */
+  /** Destroy されたノード群のスクリプトへ onDisable → onDestroy を配送して除去 */
   removeInstancesFor(ids: Set<NodeId>) {
     for (const inst of this.instances) {
-      if (ids.has(inst.nodeId)) this.safeCall(inst, 'onDestroy')
+      if (ids.has(inst.nodeId)) {
+        this.safeCall(inst, 'onDisable')
+        this.safeCall(inst, 'onDestroy')
+      }
     }
     this.instances = this.instances.filter((i) => !ids.has(i.nodeId))
   }
@@ -389,6 +403,7 @@ export class ScriptRuntime {
   }
 
   stop() {
+    for (const inst of this.instances) this.safeCall(inst, 'onDisable')
     for (const inst of this.instances) this.safeCall(inst, 'onDestroy')
     this.instances = []
     this.coroutines = []

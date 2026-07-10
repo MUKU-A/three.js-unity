@@ -9,16 +9,20 @@ import type { NodeId, SceneNode } from '../../types/scene'
 import { isDescendantOf } from '../../types/scene'
 import { cmdReparent, topmostOnly, useEditorStore } from '../../store/editorStore'
 import {
+  applyToPrefab,
   copySelection,
   createCamera,
   createEmpty,
   createLight,
+  createPrefabFromNode,
   createPrimitive,
   deleteSelection,
   duplicateSelection,
   pasteClipboard,
   renameNode,
+  revertToPrefab,
   setNodeVisible,
+  unpackPrefab,
 } from '../../store/actions'
 import { useContextMenu, type MenuItem } from '../common/ContextMenu'
 import { NodeIcon } from '../common/NodeIcon'
@@ -107,17 +111,35 @@ export function HierarchyPanel() {
     anchorRef.current = id
   }
 
-  const nodeMenuItems = (id: NodeId): MenuItem[] => [
-    { label: 'Copy', shortcut: 'Ctrl+C', onClick: () => copySelection() },
-    { label: 'Paste', shortcut: 'Ctrl+V', disabled: clipboardEmpty, onClick: () => pasteClipboard() },
-    { label: 'Paste As Child', disabled: clipboardEmpty, onClick: () => pasteClipboard(id) },
-    { separator: true },
-    { label: 'Rename', shortcut: 'F2', onClick: () => st().setRenaming(id) },
-    { label: 'Duplicate', shortcut: 'Ctrl+D', onClick: () => duplicateSelection() },
-    { label: 'Delete', shortcut: 'Del', onClick: () => deleteSelection() },
-    { separator: true },
-    ...creationMenuItems(id),
-  ]
+  const nodeMenuItems = (id: NodeId): MenuItem[] => {
+    const node = st().scene.nodes[id]
+    const prefabItems: MenuItem[] = node?.prefabId
+      ? [
+          {
+            label: 'Prefab',
+            children: [
+              { label: 'Apply to Prefab', onClick: () => applyToPrefab(id) },
+              { label: 'Revert to Prefab', onClick: () => revertToPrefab(id) },
+              { separator: true },
+              { label: 'Unpack Prefab', onClick: () => unpackPrefab(id) },
+            ],
+          },
+          { separator: true },
+        ]
+      : [{ label: 'Create Prefab', onClick: () => createPrefabFromNode(id) }, { separator: true }]
+    return [
+      { label: 'Copy', shortcut: 'Ctrl+C', onClick: () => copySelection() },
+      { label: 'Paste', shortcut: 'Ctrl+V', disabled: clipboardEmpty, onClick: () => pasteClipboard() },
+      { label: 'Paste As Child', disabled: clipboardEmpty, onClick: () => pasteClipboard(id) },
+      { separator: true },
+      { label: 'Rename', shortcut: 'F2', onClick: () => st().setRenaming(id) },
+      { label: 'Duplicate', shortcut: 'Ctrl+D', onClick: () => duplicateSelection() },
+      { label: 'Delete', shortcut: 'Del', onClick: () => deleteSelection() },
+      { separator: true },
+      ...prefabItems,
+      ...creationMenuItems(id),
+    ]
+  }
 
   /* ---------------- DnD ---------------- */
 
@@ -310,6 +332,7 @@ function HierarchyRow({
       className="u-tree-row"
       data-selected={selected}
       data-hidden={!node.visible}
+      data-prefab={!!node.prefabId}
       data-drop={dropInside ? 'inside' : undefined}
       draggable={!renaming}
       onMouseDown={(e) => {

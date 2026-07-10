@@ -46,6 +46,7 @@ function detectType(name: string): AssetType | null {
   if (/\.(glb|gltf)$/i.test(name)) return 'glb'
   if (/\.fbx$/i.test(name)) return 'fbx'
   if (/\.obj$/i.test(name)) return 'obj'
+  if (/\.prefab$/i.test(name)) return 'prefab'
   if (/\.(png|jpe?g|webp|bmp|gif)$/i.test(name)) return 'texture'
   return null
 }
@@ -94,13 +95,47 @@ export async function importAsset(name: string, buffer: ArrayBuffer, forcedId?: 
 
   if (isModelType(type)) {
     data.model = await parseModel(type, buffer)
-  } else {
+  } else if (type === 'texture') {
     const { texture, url } = await loadTexture(buffer, mimeFor(name))
     data.texture = texture
     data.objectUrl = url
   }
+  /* prefab はJSONバイナリのまま保持 (getPrefabNodes でパース) */
   registry.set(id, data)
   return meta
+}
+
+/* ---------------------------------- Prefab (D-029) ---------------------------------- */
+
+import type { SceneNode } from '../types/scene'
+
+/** サブツリー(nodes[0]=ルート)をプレハブアセットとして登録 */
+export function createPrefabAsset(name: string, nodes: SceneNode[]): AssetMeta {
+  const id = newId()
+  const buffer = new TextEncoder().encode(JSON.stringify(nodes)).buffer as ArrayBuffer
+  const meta: AssetMeta = { id, name: name.endsWith('.prefab') ? name : `${name}.prefab`, type: 'prefab', size: buffer.byteLength }
+  registry.set(id, { meta, buffer })
+  return meta
+}
+
+/** プレハブのテンプレートノード群を取得 (毎回パースした新しいオブジェクトを返す) */
+export function getPrefabNodes(id: string): SceneNode[] | null {
+  const a = registry.get(id)
+  if (!a || a.meta.type !== 'prefab') return null
+  try {
+    return JSON.parse(new TextDecoder().decode(a.buffer)) as SceneNode[]
+  } catch {
+    return null
+  }
+}
+
+/** Apply: プレハブアセットの内容を更新 */
+export function updatePrefabAsset(id: string, nodes: SceneNode[]): boolean {
+  const a = registry.get(id)
+  if (!a || a.meta.type !== 'prefab') return false
+  a.buffer = new TextEncoder().encode(JSON.stringify(nodes)).buffer as ArrayBuffer
+  a.meta = { ...a.meta, size: a.buffer.byteLength }
+  return true
 }
 
 export async function importFile(file: File): Promise<AssetMeta> {

@@ -41,6 +41,9 @@ npm run build    # 本番ビルド (tsc + vite)
   Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
 - **アニメーション**: モデルのClipをInspectorで選択 (All/None/Clip名)、スクリプトから
   crossfade切替。**FBX / OBJ** のインポートにも対応
+- **Prefab**: 右クリック「Create Prefab」でアセット化 (Hierarchyで**青表示**)、Projectから
+  インスタンス化 (DnD/Add to Scene)、**Apply to Prefab** (全インスタンスへ伝播・1 Undo) /
+  **Revert** (rootのTransformは維持) / **Unpack**。シーンJSONに自動で内蔵保存される
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play

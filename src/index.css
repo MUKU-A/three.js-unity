@@ -350,6 +350,13 @@ body {
 .u-tree-row[data-hidden='true'] .u-tree-label {
   opacity: 0.45;
 }
+/* プレハブインスタンスはUnity同様の青文字 (D-029) */
+.u-tree-row[data-prefab='true'] .u-tree-label {
+  color: #8ab8e8;
+}
+.u-tree-row[data-prefab='true'][data-selected='true'] .u-tree-label {
+  color: #b8dcff;
+}
 .u-tree-row[data-drop='inside'] {
   outline: 1px solid var(--color-u-accent);
   outline-offset: -1px;
