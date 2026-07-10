@@ -14,6 +14,8 @@ import { getComponent } from '../types/scene'
 import { getAsset } from './assets'
 import { createIconSprite, createPickProxy, type IconKind } from './icons'
 import { createContainer, DEG2RAD, disposeObject, RAD2DEG, updateContainer, type NodeContainer } from './objectFactory'
+import { ScriptRuntime } from './scripting'
+import { ensureRapier, PhysicsWorld } from './physics'
 
 /* UNITY_UI_RESEARCH.md §2 のギズモ軸色 / 選択色 */
 const AXIS_X = '#DB3E1D'
@@ -78,6 +80,17 @@ class ThreeEngine {
   /* --- 矩形選択 (D-021) --- */
   private band: { startX: number; startY: number; el: HTMLDivElement; active: boolean; additive: boolean } | null = null
 
+  /* --- スクリプト/物理ランタイム (D-025/D-026) --- */
+  private readonly gameKeys = new Set<string>()
+  private readonly gameKeysDown = new Set<string>()
+  private readonly scriptRuntime = new ScriptRuntime({
+    getKey: (k) => this.gameKeys.has(k.toLowerCase()),
+    getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
+  })
+  private physicsWorld = new PhysicsWorld()
+  private physicsPending = false
+  private colliderHelper: THREE.LineSegments | null = null
+
   constructor() {
     this.camera.position.set(7, 5, -7)
     this.camera.lookAt(0, 0, 0)
@@ -94,6 +107,15 @@ class ThreeEngine {
     /* グリッド (1m間隔・10mメジャー線・距離フェードのシェーダグリッド) */
     this.grid = makeUnityGrid()
     this.scene.add(this.grid)
+
+    /* ゲーム内入力 (再生中のみ収集, ctx.input.getKey / getKeyDown 用) */
+    window.addEventListener('keydown', (e) => {
+      if (useEditorStore.getState().mode !== 'play') return
+      const k = e.key.toLowerCase()
+      if (!this.gameKeys.has(k)) this.gameKeysDown.add(k)
+      this.gameKeys.add(k)
+    })
+    window.addEventListener('keyup', (e) => this.gameKeys.delete(e.key.toLowerCase()))
 
     /* 初期同期 + 購読開始 */
     this.applyState(useEditorStore.getState(), null)
@@ -277,7 +299,7 @@ class ThreeEngine {
     if (!prev || s.focusRequestId !== prev.focusRequestId) {
       if (prev) this.focusSelection(s)
     }
-    if (!prev || s.mode !== prev.mode) this.syncPlayMode(s)
+    if (!prev || s.mode !== prev.mode) this.syncPlayMode(s, prev?.mode ?? 'edit')
   }
 
   /** Shaded / Wireframe 描画モード (Sceneビューのドローモード, D-023) */
@@ -457,13 +479,63 @@ class ThreeEngine {
         this.scene.add(this.cameraHelper)
       }
     }
+
+    /* コライダーの緑ワイヤーフレーム (Unity互換, 選択中のみ) */
+    if (this.colliderHelper) {
+      this.colliderHelper.removeFromParent()
+      this.colliderHelper.geometry.dispose()
+      ;(this.colliderHelper.material as THREE.Material).dispose()
+      this.colliderHelper = null
+    }
+    const colComp = actNode ? getComponent(actNode, 'collider') : undefined
+    if (colComp && actObj) {
+      const geo =
+        colComp.shape === 'sphere'
+          ? new THREE.WireframeGeometry(new THREE.SphereGeometry(colComp.radius, 16, 10))
+          : new THREE.EdgesGeometry(new THREE.BoxGeometry(colComp.size.x, colComp.size.y, colComp.size.z))
+      const helper = new THREE.LineSegments(
+        geo,
+        new THREE.LineBasicMaterial({ color: 0x74f274, transparent: true, opacity: 0.85 }),
+      )
+      helper.position.set(colComp.center.x, colComp.center.y, colComp.center.z)
+      helper.userData.noPick = true
+      helper.renderOrder = 750
+      actObj.add(helper)
+      this.colliderHelper = helper
+    }
   }
 
   /* ---------------------------------- play mode ---------------------------------- */
 
-  private syncPlayMode(s: EditorState) {
+  private syncPlayMode(s: EditorState, prevMode: EditorState['mode']) {
     if (s.mode === 'play') this.clock.start()
-    // mixers は tick 内で mode を見て進める。stop 時のシーン復元は reconcileNodes が担う
+    if (prevMode === 'edit' && s.mode === 'play') {
+      /* ▶ 開始: スクリプト起動 + 物理ワールド構築 (Rapier WASMは初回のみ遅延ロード) */
+      this.gameKeys.clear()
+      this.gameKeysDown.clear()
+      this.scriptRuntime.start()
+      this.physicsPending = true
+      void ensureRapier()
+        .then(() => {
+          if (useEditorStore.getState().mode !== 'edit' && this.physicsPending) {
+            this.physicsWorld.start(
+              useEditorStore.getState().scene.nodes,
+              (id) => this.objectMap.get(id),
+              (lv, msg) => useEditorStore.getState().log(lv, msg),
+            )
+          }
+          this.physicsPending = false
+        })
+        .catch((err) => {
+          this.physicsPending = false
+          useEditorStore.getState().log('error', `Physics init failed: ${String(err)}`)
+        })
+    } else if (s.mode === 'edit' && prevMode !== 'edit') {
+      /* ⏹ 停止: ランタイム破棄 (シーン復元は reconcileNodes が担う) */
+      this.scriptRuntime.stop()
+      this.physicsWorld.dispose()
+      this.physicsPending = false
+    }
   }
 
   /* ---------------------------------- picking ---------------------------------- */
@@ -849,6 +921,16 @@ class ThreeEngine {
 
     if (st.mode === 'play') {
       for (const mixer of this.mixers.values()) mixer.update(dt)
+      /* スクリプト → 物理 の順 (kinematicボディへスクリプトの移動を反映してからステップ) */
+      this.scriptRuntime.update(dt)
+      if (this.physicsWorld.active) {
+        this.physicsWorld.step(
+          dt,
+          (id) => this.objectMap.get(id),
+          (id, worldPos, worldQuat) => this.writeWorldTransform(id, worldPos, worldQuat),
+        )
+      }
+      this.gameKeysDown.clear()
     }
 
     /* フライスルー移動 (右ドラッグ中 WASDQE / Shift=高速 / ホイール=速度) */
@@ -913,6 +995,30 @@ class ThreeEngine {
         this.gameRenderer.clear()
       }
     }
+  }
+
+  /** 物理シミュレーション結果 (ワールド変換) をローカル変換へ換算してストアに書き戻す */
+  private writeWorldTransform(id: NodeId, worldPos: THREE.Vector3, worldQuat: THREE.Quaternion) {
+    const st = useEditorStore.getState()
+    const node = st.scene.nodes[id]
+    const obj = this.objectMap.get(id)
+    if (!node || !obj) return
+
+    const local = new THREE.Matrix4().compose(worldPos, worldQuat, obj.getWorldScale(new THREE.Vector3()))
+    if (obj.parent) {
+      obj.parent.updateWorldMatrix(true, false)
+      local.premultiply(obj.parent.matrixWorld.clone().invert())
+    }
+    const p = new THREE.Vector3()
+    const q = new THREE.Quaternion()
+    const s = new THREE.Vector3()
+    local.decompose(p, q, s)
+    const eu = new THREE.Euler().setFromQuaternion(q, 'YXZ')
+    st.transientSetTransform(id, {
+      position: { x: round6(p.x), y: round6(p.y), z: round6(p.z) },
+      rotation: { x: round6(eu.x * RAD2DEG), y: round6(eu.y * RAD2DEG), z: round6(eu.z * RAD2DEG) },
+      scale: node.transform.scale,
+    })
   }
 
   /** シーン階層順で最初の有効カメラ (Unity の Game ビューカメラ相当) */

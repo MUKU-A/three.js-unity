@@ -27,8 +27,15 @@ npm run build    # 本番ビルド (tsc + vite)
   ライト/カメラのアイコン&ヘルパー、カメラプレビュー
 - **Inspector**: Transform (**ラベル横ドラッグで数値スクラブ** — Unityの手触りを再現、
   **"1+2*3" のような数式入力**にも対応)、Mesh Filter (プリミティブ切替/GLB参照)、
-  Material (色/テクスチャ/Metallic/Roughness/Opacity/Emission)、
+  Material (色 / Base Map / **Normal Map / Tiling / Offset** / Metallic/Roughness/Opacity/Emission)、
   Light / Camera (**ヘッダのenabledチェックボックス**付き)、Add Component (検索付き)
+- **スクリプト (MonoBehaviour相当)**: `onStart(ctx)` / `onUpdate(ctx, dt)` をJSで記述。
+  `const props = {...}` の宣言が **Inspectorに自動でフィールド化**され、値は保存される。
+  ctx API: `node.position/rotation/scale`、`find(name)`、`input.getKey/getKeyDown`、`time`、`log`。
+  内蔵スクリプトエディタ (コンポーネントの「Open Script Editor」) 付き
+- **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰) と Box/Sphere Collider
+  (反発/摩擦/センター/サイズ、選択中は緑ワイヤーフレーム表示)。▶ 再生で落下・衝突し、
+  ⏹ 停止で完全復元。Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play
@@ -67,11 +74,10 @@ UI操作 ──▶ Command ──▶ Zustandストア (正規化シーングラ�
 設計判断の記録: **[DECISIONS.md](./DECISIONS.md)** / Unity UI調査: **[UNITY_UI_RESEARCH.md](./UNITY_UI_RESEARCH.md)** /
 Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DOC_LINKS.md)** (本文の複製はpublicリポジトリでは権利上不可のためリンク集。D-018参照)
 
-## 拡張余地 (スコープ外として設計だけ確保)
+## 拡張余地
 
-- スクリプトコンポーネント (components配列にscript型を足すだけの構造)
-- Supabase保存 (シリアライズ形式が正規化済み。assetsをStorage URL参照へ差し替え)
-- マルチ編集Inspector、OutlinePassによる選択表示、Game/Sceneタブ分離、シーンギズモ(方位キューブ)
+Unityとのギャップ評価と優先度付き実装計画は **[ROADMAP.md](./ROADMAP.md)** を参照
+(Prefab、衝突イベント/Raycast API、URL参照アセット、Animatorステートマシン、ポストプロセス、ビルド出力ほか)。
 
 ## 権利について
 

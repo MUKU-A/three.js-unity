@@ -200,9 +200,19 @@ export function MeshSection({ node, comp, index }: { node: SceneNode; comp: Mesh
 
 export function MaterialSection({ node, comp, index }: { node: SceneNode; comp: MaterialComponent; index: number }) {
   const [open, setOpen] = useState(true)
-  const { key } = useComponentCommit(node.id, index)
+  const { transient, commit, key } = useComponentCommit(node.id, index)
   const assets = useEditorStore((s) => s.assets)
   const textures = assets.filter((a) => a.type === 'texture')
+
+  /* Tiling/Offset の軸別編集 (Unityのマテリアル毎 Tiling/Offset) */
+  const uvKey = (slot: 'tiling' | 'offset', axis: 'x' | 'y', c: MaterialComponent) => {
+    const cur = slot === 'tiling' ? (c.tiling ?? { x: 1, y: 1 }) : (c.offset ?? { x: 0, y: 0 })
+    return {
+      onTransient: (v: number) => transient({ [slot]: { ...cur, [axis]: v } }),
+      onCommit: (b: number, a: number) =>
+        commit({ [slot]: { ...cur, [axis]: b } }, { [slot]: { ...cur, [axis]: a } }, `Set ${slot}`),
+    }
+  }
 
   return (
     <div>
@@ -224,6 +234,22 @@ export function MaterialSection({ node, comp, index }: { node: SceneNode; comp: 
               key<'textureAssetId', string | null>('textureAssetId', 'Set Texture').onCommit(b === '' ? null : b, a === '' ? null : a)
             }
           />
+          <SelectRow
+            label="Normal Map"
+            value={comp.normalMapAssetId ?? ''}
+            options={[{ value: '', label: 'None (Texture)' }, ...textures.map((t) => ({ value: t.id, label: t.name }))]}
+            onCommit={(b, a) =>
+              key<'normalMapAssetId', string | null>('normalMapAssetId', 'Set Normal Map').onCommit(b === '' ? null : b, a === '' ? null : a)
+            }
+          />
+          <FieldRow label="Tiling">
+            <NumberField label="X" value={comp.tiling?.x ?? 1} {...uvKey('tiling', 'x', comp)} />
+            <NumberField label="Y" value={comp.tiling?.y ?? 1} {...uvKey('tiling', 'y', comp)} />
+          </FieldRow>
+          <FieldRow label="Offset">
+            <NumberField label="X" value={comp.offset?.x ?? 0} {...uvKey('offset', 'x', comp)} />
+            <NumberField label="Y" value={comp.offset?.y ?? 0} {...uvKey('offset', 'y', comp)} />
+          </FieldRow>
           <SliderRow label="Metallic" value={comp.metalness} {...key<'metalness', number>('metalness')} />
           <SliderRow label="Roughness" value={comp.roughness} {...key<'roughness', number>('roughness')} />
           <SliderRow label="Opacity" value={comp.opacity} {...key<'opacity', number>('opacity')} />

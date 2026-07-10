@@ -11,6 +11,7 @@
     "e2e": "for f in e2e/verify*.mjs; do node $f || exit 1; done"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "@fontsource/inter": "^5.2.8",
     "dockview-react": "^7.0.2",
     "lucide-react": "^1.24.0",

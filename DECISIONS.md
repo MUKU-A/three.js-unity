@@ -116,6 +116,26 @@
 - Hierarchyの可視性トグルを左端ガターへ (Unity 2019.3+のScene Visibility配置)
 - Ctrl+P = Play/Stop
 
+## D-025: スクリプトシステム = onStart/onUpdate + props宣言のリフレクションUI
+- MonoBehaviour相当。`new Function` でコンパイルし、ctx (node proxy/find/input/time/log) を注入。
+- **Transformへの書込はストアtransient経由** — SSoT一方向フローを維持し、再生中も
+  Inspectorがライブ更新され、停止時はスナップショット復元で自然に巻き戻る。
+- `const props = {...}` をInspectorへ自動露出。保存時は「既存キーの編集値保持・新キーは
+  デフォルト・消えたキーは破棄」でマージ (Unityのシリアライズ値保持と同挙動)。
+- 実行時エラーは1回でそのスクリプトを無効化しConsoleへ (スパム防止)。
+
+## D-026: 物理 = Rapier (rapier3d-compat, WASM遅延ロード)
+- 候補: cannon-es / ammo.js / Rapier → 型・性能・メンテ状況でRapierを採用。
+  compatビルドはWASMをbase64内蔵するためオフライン/CSP環境でも動く。初回▶で遅延init。
+- Unity互換の意味論: Rigidbodyなしコライダー=静的、isKinematic、Use Gravity、質量/反発/摩擦。
+- 書き戻しはワールド→ローカル変換してストアtransientへ (D-025と同じくSSoT維持)。
+- コライダーは選択中に緑ワイヤーフレーム表示 (Unityの見た目)。
+
+## D-027: マテリアルのマップ拡張はテクスチャ複製で行う
+- Normal Map / Tiling / Offset を追加。レジストリのテクスチャは共有物のため、
+  アセットID変更時にマテリアル専用cloneを割り当ててから repeat/offset を設定する
+  (Unityの「マテリアル毎のTiling」と同じ独立性)。法線マップはNoColorSpace。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

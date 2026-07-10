@@ -81,11 +81,38 @@ function applyMaterialProps(mat: THREE.MeshStandardMaterial, comp: MaterialCompo
   mat.emissiveIntensity = comp.emissiveIntensity
   mat.wireframe = comp.wireframe
   mat.userData.baseWireframe = comp.wireframe // Sceneビューのワイヤーフレーム表示と区別するための基底値
-  const tex = getAsset(comp.textureAssetId)?.texture ?? null
-  if (mat.map !== tex) {
-    mat.map = tex
-    mat.needsUpdate = true
+
+  /* テクスチャはレジストリ共有物のため、Tiling/Offsetをマテリアル毎に効かせられるよう
+     アセットIDが変わったタイミングで複製を割り当てる (Unityのマテリアル毎Tiling互換) */
+  assignMap(mat, 'map', comp.textureAssetId ?? null)
+  assignMap(mat, 'normalMap', comp.normalMapAssetId ?? null)
+  const tiling = comp.tiling ?? { x: 1, y: 1 }
+  const offset = comp.offset ?? { x: 0, y: 0 }
+  for (const slot of ['map', 'normalMap'] as const) {
+    const tex = mat[slot]
+    if (tex) {
+      tex.repeat.set(tiling.x, tiling.y)
+      tex.offset.set(offset.x, offset.y)
+    }
   }
+}
+
+function assignMap(mat: THREE.MeshStandardMaterial, slot: 'map' | 'normalMap', assetId: string | null) {
+  const key = `assetId:${slot}`
+  if (mat.userData[key] === assetId) return
+  mat.userData[key] = assetId
+  const src = getAsset(assetId)?.texture ?? null
+  const old = mat[slot]
+  if (old && old.userData.ownedByMaterial) old.dispose()
+  if (src) {
+    const clone = src.clone()
+    clone.userData.ownedByMaterial = true
+    if (slot === 'normalMap') clone.colorSpace = THREE.NoColorSpace // 法線マップは非カラーデータ
+    mat[slot] = clone
+  } else {
+    mat[slot] = null
+  }
+  mat.needsUpdate = true
 }
 
 /* ---------------------------------- Mesh part ---------------------------------- */

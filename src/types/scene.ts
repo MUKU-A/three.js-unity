@@ -59,8 +59,13 @@ export interface MaterialComponent {
   opacity: number
   emissive: string
   emissiveIntensity: number
-  /** テクスチャアセット参照 */
+  /** Base Map (アルベド) テクスチャアセット参照 */
   textureAssetId?: string | null
+  /** Normal Map アセット参照 */
+  normalMapAssetId?: string | null
+  /** UVタイリング/オフセット (Unityの Tiling / Offset) */
+  tiling?: { x: number; y: number }
+  offset?: { x: number; y: number }
   wireframe: boolean
 }
 
@@ -94,7 +99,54 @@ export interface CameraComponent {
   orthoSize: number
 }
 
-export type Component = MeshComponent | MaterialComponent | LightComponent | CameraComponent
+/* ---------------------------------- Script / Physics ---------------------------------- */
+
+/**
+ * MonoBehaviour相当のスクリプト (D-025)。
+ * code 内で onStart(ctx) / onUpdate(ctx, dt) を定義し、const props = {...} で
+ * Inspector に露出するプロパティを宣言する。再生モード中のみ実行される。
+ */
+export interface ScriptComponent {
+  type: 'script'
+  enabled?: boolean
+  name: string
+  code: string
+  /** Inspector編集可能な公開プロパティ (codeの `const props` から抽出、値はここが正) */
+  props: Record<string, number | string | boolean>
+}
+
+/** Rigidbody (Rapier結線, D-026)。isKinematic=trueで物理の影響を受けない移動体 */
+export interface RigidbodyComponent {
+  type: 'rigidbody'
+  mass: number
+  useGravity: boolean
+  isKinematic: boolean
+  linearDamping: number
+  angularDamping: number
+}
+
+/** Collider。rigidbodyなしのcolliderは静的衝突体 (Unity互換) */
+export interface ColliderComponent {
+  type: 'collider'
+  shape: 'box' | 'sphere'
+  /** box: 各辺サイズ / sphere: radius を使用 */
+  size: Vec3
+  radius: number
+  /** ローカル中心オフセット */
+  center: Vec3
+  /** 反発係数 0..1 */
+  bounciness: number
+  friction: number
+}
+
+export type Component =
+  | MeshComponent
+  | MaterialComponent
+  | LightComponent
+  | CameraComponent
+  | ScriptComponent
+  | RigidbodyComponent
+  | ColliderComponent
 export type ComponentType = Component['type']
 
 /* ---------------------------------- Node / Scene ---------------------------------- */
@@ -156,7 +208,53 @@ export const defaultMaterial = (): MaterialComponent => ({
   emissive: '#000000',
   emissiveIntensity: 1,
   textureAssetId: null,
+  normalMapAssetId: null,
+  tiling: { x: 1, y: 1 },
+  offset: { x: 0, y: 0 },
   wireframe: false,
+})
+
+export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。onStart / onUpdate を定義します。
+// const props = {...} で宣言した値は Inspector から編集できます。
+const props = {
+  speed: 90,
+}
+
+function onStart(ctx) {
+  ctx.log(ctx.node.name + ' started')
+}
+
+function onUpdate(ctx, dt) {
+  // 例: Y軸回転 (度/秒)
+  ctx.node.rotation.y += ctx.props.speed * dt
+}
+`
+
+export const defaultScript = (name = 'NewBehaviour'): ScriptComponent => ({
+  type: 'script',
+  enabled: true,
+  name,
+  code: DEFAULT_SCRIPT_CODE,
+  props: { speed: 90 },
+})
+
+export const defaultRigidbody = (): RigidbodyComponent => ({
+  type: 'rigidbody',
+  mass: 1,
+  useGravity: true,
+  isKinematic: false,
+  linearDamping: 0,
+  angularDamping: 0.05,
+})
+
+export const defaultCollider = (shape: 'box' | 'sphere' = 'box'): ColliderComponent => ({
+  type: 'collider',
+  shape,
+  size: vec3(1, 1, 1),
+  radius: 0.5,
+  center: vec3(0, 0, 0),
+  bounciness: 0,
+  friction: 0.5,
 })
 
 export const defaultMesh = (geometry: PrimitiveKind = 'box'): MeshComponent => ({

@@ -3,12 +3,22 @@
  * マルチ選択時はアクティブ(末尾)を表示 (D-010)。
  */
 import { useRef, useState } from 'react'
-import { Box, Camera, Lightbulb, Palette, Plus, Search } from 'lucide-react'
+import { Box, Camera, FileCode, Lightbulb, Palette, Plus, Search, Shield, Weight } from 'lucide-react'
 import { activeNodeId, cmdAddComponent, cmdPatchNode, useEditorStore } from '../../store/editorStore'
-import { defaultCamera, defaultLight, defaultMaterial, defaultMesh, getComponent } from '../../types/scene'
+import {
+  defaultCamera,
+  defaultCollider,
+  defaultLight,
+  defaultMaterial,
+  defaultMesh,
+  defaultRigidbody,
+  defaultScript,
+  getComponent,
+} from '../../types/scene'
 import type { Component } from '../../types/scene'
 import { NodeIcon } from '../common/NodeIcon'
 import { CameraSection, LightSection, MaterialSection, MeshSection, TransformSection } from '../inspector/sections'
+import { ColliderSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
 
 export function InspectorPanel() {
   const node = useEditorStore((s) => {
@@ -40,6 +50,12 @@ export function InspectorPanel() {
             return <LightSection key={k} node={node} comp={c} index={i} />
           case 'camera':
             return <CameraSection key={k} node={node} comp={c} index={i} />
+          case 'script':
+            return <ScriptSection key={k} node={node} comp={c} index={i} />
+          case 'rigidbody':
+            return <RigidbodySection key={k} node={node} comp={c} index={i} />
+          case 'collider':
+            return <ColliderSection key={k} node={node} comp={c} index={i} />
           default:
             return null
         }
@@ -112,11 +128,17 @@ const COMPONENT_DEFS: Array<{
   label: string
   icon: React.ReactNode
   make: () => Component
+  /** Unityのスクリプトのように同型を複数付けられるもの */
+  allowMultiple?: boolean
 }> = [
   { type: 'mesh', label: 'Mesh Filter', icon: <Box size={13} />, make: () => defaultMesh('box') },
   { type: 'material', label: 'Material', icon: <Palette size={13} />, make: () => defaultMaterial() },
   { type: 'light', label: 'Light', icon: <Lightbulb size={13} />, make: () => defaultLight('point') },
   { type: 'camera', label: 'Camera', icon: <Camera size={13} />, make: () => defaultCamera() },
+  { type: 'script', label: 'New Script', icon: <FileCode size={13} />, make: () => defaultScript(), allowMultiple: true },
+  { type: 'rigidbody', label: 'Rigidbody', icon: <Weight size={13} />, make: () => defaultRigidbody() },
+  { type: 'collider', label: 'Box Collider', icon: <Shield size={13} />, make: () => defaultCollider('box') },
+  { type: 'collider', label: 'Sphere Collider', icon: <Shield size={13} />, make: () => defaultCollider('sphere') },
 ]
 
 function AddComponentButton({ nodeId }: { nodeId: string }) {
@@ -128,7 +150,7 @@ function AddComponentButton({ nodeId }: { nodeId: string }) {
   if (!node) return null
 
   const items = COMPONENT_DEFS.filter(
-    (d) => d.label.toLowerCase().includes(query.toLowerCase()) && !getComponent(node, d.type),
+    (d) => d.label.toLowerCase().includes(query.toLowerCase()) && (d.allowMultiple || !getComponent(node, d.type)),
   )
 
   return (
@@ -157,7 +179,7 @@ function AddComponentButton({ nodeId }: { nodeId: string }) {
             {items.length === 0 && <div className="text-u-sub text-center py-2">No components</div>}
             {items.map((d) => (
               <div
-                key={d.type}
+                key={d.label}
                 className="u-menu-item items-center !justify-start gap-2"
                 onClick={() => {
                   st().execute(cmdAddComponent(nodeId, d.make()))
