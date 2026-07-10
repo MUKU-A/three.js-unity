@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "for f in e2e/verify*.mjs; do node $f || exit 1; done"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
