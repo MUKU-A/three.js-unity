@@ -101,7 +101,8 @@ UI操作 ──▶ Command ──▶ Zustandストア (正規化シーングラ�
 - `src/components/` — dockviewレイアウト、5パネル、Inspectorフィールド (スクラブ実装は `inspector/fields.tsx`)
 
 設計判断の記録: **[DECISIONS.md](./DECISIONS.md)** / Unity UI調査: **[UNITY_UI_RESEARCH.md](./UNITY_UI_RESEARCH.md)** /
-Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DOC_LINKS.md)** (本文の複製はpublicリポジトリでは権利上不可のためリンク集。D-018参照)
+Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DOC_LINKS.md)** (本文の複製はpublicリポジトリでは権利上不可のためリンク集。D-018参照) /
+チュートリアル移植の作業指示書 (AIエージェント向け): **[docs/TUTORIAL_PORTING_PLAYBOOK.md](./docs/TUTORIAL_PORTING_PLAYBOOK.md)**
 
 ## チュートリアルで試す
 
