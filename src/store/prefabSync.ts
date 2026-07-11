@@ -72,6 +72,7 @@ export function countOverrides(graph: SceneGraph, instanceRootId: NodeId, templa
       if (!deepEqual(inst.transform, t.transform)) count++
       if (inst.name !== t.name) count++
       if (inst.visible !== t.visible) count++
+      if ((inst.tag ?? null) !== (t.tag ?? null)) count++
     }
     const len = Math.max(inst.components.length, t.components.length)
     for (let i = 0; i < len; i++) {
@@ -171,6 +172,7 @@ export function mergeTemplateUpdate(
       if (deepEqual(g.nodes[inst.id].transform, tOld.transform)) patch.transform = structuredClone(tNew.transform)
       if (g.nodes[inst.id].name === tOld.name) patch.name = tNew.name
       if (g.nodes[inst.id].visible === tOld.visible) patch.visible = tNew.visible
+      if ((g.nodes[inst.id].tag ?? null) === (tOld.tag ?? null)) patch.tag = tNew.tag ?? null
     }
     patch.components = mergeComponents(tOld.components, tNew.components, g.nodes[inst.id].components)
     g = patchNode(g, inst.id, patch)

@@ -32,11 +32,14 @@ npm run build    # 本番ビルド (tsc + vite)
 - **スクリプト (MonoBehaviour相当)**: `onStart / onUpdate / onFixedUpdate / onLateUpdate / onDestroy /
   onCollisionEnter・Exit / onTriggerEnter・Exit` をJSで記述。`const props = {...}` の宣言が
   **Inspectorに自動でフィールド化**され、値は保存される。ctx API:
-  `node.position/rotation/scale/worldPosition`、**`node.getComponent(型|スクリプト名)`** (live読み書き)、
-  **`node.setParent`**、`find`、**`instantiate` / `destroy`**、**`physics.raycast`**、
-  **`screenPointToRay`**、**`startCoroutine`**(generator, `yield 秒`)、**`animation.play(clip, fade)`**、
-  `input.getKey/getKeyDown/getMouseButton/getMouseButtonDown/mousePosition`、`time`、`log`。
-  内蔵スクリプトエディタ付き
+  `node.position/rotation/scale/worldPosition`、**`node.tag` / `compareTag`** (InspectorのTag欄)、
+  **`node.setActive(bool)`** (GameObject.SetActive相当 — 表示+物理+スクリプトをサブツリーごと切替)、
+  **`node.getComponent(型|スクリプト名)`** (live読み書き。**rigidbodyは `.addForce({x,y,z})` /
+  `.velocity`** で物理エンジンを直接駆動)、**`node.setParent`**、`find`、
+  **`instantiate` / `destroy`**、**`physics.raycast`**、**`screenPointToRay`**、
+  **`startCoroutine`**(generator, `yield 秒`)、**`animation.play(clip, fade)`**、
+  `input.getKey/getKeyDown/getMouseButton/getMouseButtonDown/mousePosition/`**`getAxis('Horizontal'|'Vertical')`**、
+  `time`、`log`。内蔵スクリプトエディタ付き
 - **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰) と Box/Sphere Collider
   (反発/摩擦/センター/サイズ/**Is Trigger**、選択中は緑ワイヤーフレーム表示)。固定50Hzステップ、
   **衝突/トリガーイベントをスクリプトへ配送**。▶ 再生で落下・衝突し、⏹ 停止で完全復元。
@@ -55,6 +58,9 @@ npm run build    # 本番ビルド (tsc + vite)
 - **ジョイント**: **Fixed / Hinge / Spring Joint** (Rapier impulse joints)。
   Connected Body選択 (None=ワールド係留)、Anchor/Axis/バネ係数̶̶ドアの蝶番や振り子、
   吊り物などの物理ギミックが組める
+- **UIテキスト (GameObject > UI > Text)**: スクリーンスペースのテキストをGameビューへ
+  オーバーレイ描画 (アンカー9方位+オフセット+フォントサイズ+色)。スクリプトから
+  `getComponent('uitext').text = ...` でスコア表示等がライブ更新できる
 - **Project**: GLB / テクスチャのインポート (ボタン or ファイルドロップ)、
   **タイルをSceneビューへドラッグして配置**、テクスチャはオブジェクトへドロップで割当
 - **Console**: info/warn/error フィルタ、Clear、Clear on Play
@@ -92,6 +98,13 @@ UI操作 ──▶ Command ──▶ Zustandストア (正規化シーングラ�
 
 設計判断の記録: **[DECISIONS.md](./DECISIONS.md)** / Unity UI調査: **[UNITY_UI_RESEARCH.md](./UNITY_UI_RESEARCH.md)** /
 Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DOC_LINKS.md)** (本文の複製はpublicリポジトリでは権利上不可のためリンク集。D-018参照)
+
+## チュートリアルで試す
+
+Unity公式の入門チュートリアル **Roll-a-Ball (玉転がし)** を本エディタでそのまま完走できます:
+**[docs/TUTORIAL_ROLL_A_BALL.md](./docs/TUTORIAL_ROLL_A_BALL.md)** (公式手順 → 本エディタ操作の対応表 +
+C#→JS変換済みスクリプト)。全手順は `e2e/rollaball.mjs` で自動検証済み
+(キーボード操縦で12個収集 → "You Win!" → ⏹完全復元)。
 
 ## 拡張余地
 

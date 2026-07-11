@@ -6,7 +6,7 @@ import { useMemo, useRef, useState } from 'react'
 import { getPrefabNodes } from '../../engine/assets'
 import { countOverrides } from '../../store/prefabSync'
 import { applyToPrefab, revertToPrefab } from '../../store/actions'
-import { Box, Camera, FileCode, Lightbulb, Link2, Palette, Plus, Search, Shield, Volume2, Weight } from 'lucide-react'
+import { Box, Camera, FileCode, Lightbulb, Link2, Palette, Plus, Search, Shield, Type, Volume2, Weight } from 'lucide-react'
 import { activeNodeId, cmdAddComponent, cmdPatchNode, useEditorStore } from '../../store/editorStore'
 import {
   defaultAudioSource,
@@ -18,11 +18,12 @@ import {
   defaultMesh,
   defaultRigidbody,
   defaultScript,
+  defaultUIText,
   getComponent,
 } from '../../types/scene'
 import type { Component } from '../../types/scene'
 import { NodeIcon } from '../common/NodeIcon'
-import { CameraSection, LightSection, MaterialSection, MeshSection, TransformSection } from '../inspector/sections'
+import { CameraSection, LightSection, MaterialSection, MeshSection, TransformSection, UITextSection } from '../inspector/sections'
 import { AudioSourceSection, ColliderSection, JointSection, RigidbodySection, ScriptSection } from '../inspector/scriptPhysicsSections'
 
 export function InspectorPanel() {
@@ -66,6 +67,8 @@ export function InspectorPanel() {
             return <AudioSourceSection key={k} node={node} comp={c} index={i} />
           case 'joint':
             return <JointSection key={k} node={node} comp={c} index={i} />
+          case 'uitext':
+            return <UITextSection key={k} node={node} comp={c} index={i} />
           default:
             return null
         }
@@ -88,17 +91,52 @@ function Header({ nodeId }: { nodeId: string }) {
   if (!node) return null
 
   return (
-    <div className="px-2 py-2 border-b border-u-border bg-u-panel flex items-center gap-1.5">
-      <NodeIcon node={node} size={18} />
-      <input
-        type="checkbox"
-        className="u-check"
-        checked={node.visible}
-        title="Active"
-        onChange={() => st().execute(cmdPatchNode(nodeId, { visible: node.visible }, { visible: !node.visible }, node.visible ? 'Deactivate' : 'Activate'))}
-      />
-      <NameField key={node.name} nodeId={nodeId} name={node.name} />
+    <div className="px-2 py-2 border-b border-u-border bg-u-panel flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <NodeIcon node={node} size={18} />
+        <input
+          type="checkbox"
+          className="u-check"
+          checked={node.visible}
+          title="Active"
+          onChange={() => st().execute(cmdPatchNode(nodeId, { visible: node.visible }, { visible: !node.visible }, node.visible ? 'Deactivate' : 'Activate'))}
+        />
+        <NameField key={node.name} nodeId={nodeId} name={node.name} />
+      </div>
+      <div className="flex items-center gap-1.5 pl-[24px]">
+        <span className="text-u-sub text-[11px] flex-none">Tag</span>
+        <TagField key={node.tag ?? ''} nodeId={nodeId} tag={node.tag ?? ''} />
+      </div>
     </div>
+  )
+}
+
+/** Unityの Tag 相当 (自由入力, 空=Untagged) */
+function TagField({ nodeId, tag }: { nodeId: string; tag: string }) {
+  const [text, setText] = useState(tag)
+  const st = useEditorStore.getState
+  const commit = () => {
+    const trimmed = text.trim()
+    if (trimmed !== tag) {
+      st().execute(cmdPatchNode(nodeId, { tag: tag || null }, { tag: trimmed || null }, 'Set Tag'))
+    }
+  }
+  return (
+    <input
+      className="u-input !h-[18px] text-[11px]"
+      value={text}
+      placeholder="Untagged"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') {
+          setText(tag)
+          ;(e.target as HTMLInputElement).blur()
+        }
+        e.stopPropagation()
+      }}
+    />
   )
 }
 
@@ -184,6 +222,7 @@ const COMPONENT_DEFS: Array<{
   { type: 'joint', label: 'Hinge Joint', icon: <Link2 size={13} />, make: () => defaultJoint('hinge') },
   { type: 'joint', label: 'Fixed Joint', icon: <Link2 size={13} />, make: () => defaultJoint('fixed') },
   { type: 'joint', label: 'Spring Joint', icon: <Link2 size={13} />, make: () => defaultJoint('spring') },
+  { type: 'uitext', label: 'UI Text', icon: <Type size={13} />, make: () => defaultUIText() },
 ]
 
 function AddComponentButton({ nodeId }: { nodeId: string }) {

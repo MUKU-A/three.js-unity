@@ -95,6 +95,12 @@ class ThreeEngine {
     {
       getKey: (k) => this.gameKeys.has(k.toLowerCase()),
       getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
+      getAxis: (axis) => {
+        const k = (n: string) => this.gameKeys.has(n)
+        if (axis === 'Horizontal') return (k('d') || k('arrowright') ? 1 : 0) - (k('a') || k('arrowleft') ? 1 : 0)
+        if (axis === 'Vertical') return (k('w') || k('arrowup') ? 1 : 0) - (k('s') || k('arrowdown') ? 1 : 0)
+        return 0
+      },
       getMouseButton: (b) => this.gameMouseButtons.has(b),
       getMouseButtonDown: (b) => this.gameMouseButtonsDown.has(b),
       mousePosition: this.gameMousePos,
@@ -118,6 +124,10 @@ class ThreeEngine {
         }
         void this.audioManager.playOneShot(asset.id, volume, nodeId ? this.objectMap.get(nodeId) : null)
       },
+      addForce: (id, force) => this.physicsWorld.addForce(id, force),
+      getLinearVelocity: (id) => this.physicsWorld.getLinearVelocity(id),
+      setLinearVelocity: (id, v) => this.physicsWorld.setLinearVelocity(id, v),
+      setNodeActive: (id, active) => this.setNodeActive(id, active),
     },
   )
   private readonly audioManager = new AudioManager()
@@ -547,6 +557,31 @@ class ThreeEngine {
     this.scriptRuntime.removeInstancesFor(ids)
     for (const nid of ids) this.physicsWorld.removeNode(nid)
     state.transientRemoveSubtree(id)
+  }
+
+  /**
+   * スクリプトAPI: GameObject.SetActive 相当 (ctx.node.setActive)。
+   * visible切替に加え、再生中はサブツリーの物理ボディとスクリプトも停止/再開する。
+   * 停止時はスナップショット復元で元に戻る。
+   */
+  private setNodeActive(id: NodeId, active: boolean) {
+    const state = useEditorStore.getState()
+    const node = state.scene.nodes[id]
+    if (!node || node.visible === active) return
+    state.transientPatchNode(id, { visible: active })
+    if (state.mode === 'edit' || !this.physicsWorld.active) return
+    const st = useEditorStore.getState()
+    const ids = collectSubtreeIds(st.scene.nodes, id)
+    if (!active) {
+      for (const nid of ids) this.physicsWorld.removeNode(nid)
+      this.scriptRuntime.setNodesActive(ids, false)
+    } else {
+      for (const nid of ids) {
+        if (!this.isChainVisible(nid, st)) continue
+        this.physicsWorld.addNode(st.scene.nodes[nid], this.objectMap.get(nid), (lv, msg) => useEditorStore.getState().log(lv, msg))
+      }
+      this.scriptRuntime.setNodesActive(ids, true)
+    }
   }
 
   /* ---------------------------------- 選択・ギズモ・ヘルパー ---------------------------------- */

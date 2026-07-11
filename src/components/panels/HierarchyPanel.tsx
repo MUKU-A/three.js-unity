@@ -16,6 +16,7 @@ import {
   createLight,
   createPrefabFromNode,
   createPrimitive,
+  createUIText,
   deleteSelection,
   duplicateSelection,
   pasteClipboard,
@@ -56,6 +57,10 @@ export function creationMenuItems(parentId: NodeId | null): MenuItem[] {
         { label: 'Point Light', onClick: () => createLight('point', parentId) },
         { label: 'Spot Light', onClick: () => createLight('spot', parentId) },
       ],
+    },
+    {
+      label: 'UI',
+      children: [{ label: 'Text', onClick: () => createUIText(parentId) }],
     },
     { label: 'Camera', onClick: () => createCamera(parentId) },
   ]

@@ -241,6 +241,14 @@ export class PhysicsWorld {
     this.world.timestep = fixedDt
     this.world.step(this.eventQueue)
 
+    /* Unity互換: AddForce はステップ毎に消費される (Rapierの永続外力をクリア) */
+    for (const e of this.entries.values()) {
+      if (e.dynamic) {
+        e.body.resetForces(false)
+        e.body.resetTorques(false)
+      }
+    }
+
     const events: CollisionEvent[] = []
     this.eventQueue.drainCollisionEvents((h1, h2, started) => {
       const a = this.colliderToNode.get(h1)
@@ -256,6 +264,30 @@ export class PhysicsWorld {
       sync(e.nodeId, pos.set(t.x, t.y, t.z), quat.set(r.x, r.y, r.z, r.w))
     }
     return events
+  }
+
+  /** Rigidbody.AddForce 相当 (連続力)。次の step で積分され、step 後にリセットされる */
+  addForce(id: NodeId, force: { x: number; y: number; z: number }) {
+    const e = this.entries.get(id)
+    if (!e || !e.dynamic) return
+    if (!Number.isFinite(force.x) || !Number.isFinite(force.y) || !Number.isFinite(force.z)) return
+    e.body.addForce(force, true)
+  }
+
+  /** Rigidbody.velocity 取得 */
+  getLinearVelocity(id: NodeId): { x: number; y: number; z: number } {
+    const e = this.entries.get(id)
+    if (!e) return { x: 0, y: 0, z: 0 }
+    const v = e.body.linvel()
+    return { x: v.x, y: v.y, z: v.z }
+  }
+
+  /** Rigidbody.velocity 設定 */
+  setLinearVelocity(id: NodeId, v: { x: number; y: number; z: number }) {
+    const e = this.entries.get(id)
+    if (!e || !e.dynamic) return
+    if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z)) return
+    e.body.setLinvel(v, true)
   }
 
   /** スクリプト向け物理レイキャスト (ctx.physics.raycast) */

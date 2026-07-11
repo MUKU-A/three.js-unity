@@ -55,6 +55,7 @@
 | **GetComponent / SetParent / worldPosition** | ✅ ctx.node.getComponent(型 or スクリプト名) の live読み書きプロキシ、setParent (循環ガード付き)、worldPosition (D-031) |
 | **オーディオ (AudioSource)** | ✅ .mp3/.wav/.oggインポート、AudioSource (volume/loop/playOnAwake/spatial/距離減衰)、GameカメラへのListener自動付帯、⏸連動suspend、ctx.playSound ワンショット (D-032)。Audio Mixerは対象外 |
 | **物理ジョイント** | ✅ Fixed / Hinge / Spring (Rapier impulse joints)。Connected Body選択、None=ワールド係留、Anchor/Axis/バネ係数 (D-033)。振り子・同伴落下・係留をE2E実測 |
+| **Roll-a-Ball完走パック** | ✅ input.getAxis、rigidbody.addForce/velocity (step毎リセット=Unity互換)、Tag + compareTag、SetActive (物理+スクリプト連動)、UI Text最小実装 (D-035)。公式チュートリアルをE2E自動プレイで完走検証 (docs/TUTORIAL_ROLL_A_BALL.md) |
 
 ## 未対応 — 優先度順の実装計画
 
@@ -75,7 +76,8 @@
   「File > Build」。エンジン層がUI非依存なので分離可能な設計になっている。
 
 ### P3 (スコープ外を維持 / 需要が出たら)
-- ゲーム内UI (Canvas/RectTransform)、Particle System、Timeline編集UI、
+- ゲーム内UIの完全版 (RectTransformレイアウト/Button/Image — **Textの最小実装はD-035で対応済み**)、
+  Particle System、Timeline編集UI、
   Lightmapベイク/Light Probe、カメラスタッキング/RenderTexture/Culling Mask、
   Profiler、オーディオ/.obj/.fbxインポータ、シェーダーグラフ。
 

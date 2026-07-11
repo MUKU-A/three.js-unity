@@ -3,7 +3,7 @@
  * すべて Command 経由で SSoT を変更する。
  */
 import type { LightKind, NodeId, PrimitiveKind, SceneNode, Vec3 } from '../types/scene'
-import { collectSubtreeIds } from '../types/scene'
+import { collectSubtreeIds, defaultUIText } from '../types/scene'
 import {
   cmdAddObject,
   cmdDeleteObjects,
@@ -45,6 +45,13 @@ export function createLight(kind: LightKind, parentId: NodeId | null = null) {
 
 export function createCamera(parentId: NodeId | null = null) {
   st().execute(cmdAddObject([uniquify(makeCameraNode(), parentId)], parentId))
+}
+
+/** GameObject > UI > Text: スクリーンスペースのUIテキストノード (D-035) */
+export function createUIText(parentId: NodeId | null = null) {
+  const node = makeEmptyNode('Text')
+  node.components.push(defaultUIText())
+  st().execute(cmdAddObject([uniquify(node, parentId)], parentId))
 }
 
 export function deleteSelection(ids?: NodeId[]) {

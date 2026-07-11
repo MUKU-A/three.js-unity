@@ -3,7 +3,7 @@
  * すべて SSoT 経由: transient 適用 + pushApplied で1操作=1Undo。
  */
 import { useState, type ReactNode } from 'react'
-import { Box, Camera, ChevronRight, Lightbulb, Move3d, Palette, MoreVertical } from 'lucide-react'
+import { Box, Camera, ChevronRight, Lightbulb, Move3d, Palette, MoreVertical, Type } from 'lucide-react'
 import type {
   CameraComponent,
   Component,
@@ -14,6 +14,7 @@ import type {
   PrimitiveKind,
   SceneNode,
   Transform,
+  UITextComponent,
 } from '../../types/scene'
 import { defaultTransform } from '../../types/scene'
 import { cmdPatchComponent, cmdPatchNode, cmdRemoveComponent, useEditorStore } from '../../store/editorStore'
@@ -365,6 +366,77 @@ export function CameraSection({ node, comp, index }: { node: SceneNode; comp: Ca
           <FieldRow label="">
             <NumberField label="Far" labelWidth={32} value={comp.far} {...key<'far', number>('far')} />
           </FieldRow>
+        </Section>
+      )}
+    </div>
+  )
+}
+
+/* ---------------------------------- UI Text (D-035) ---------------------------------- */
+
+function TextValueRow({ label, value, onCommit }: { label: string; value: string; onCommit: (b: string, a: string) => void }) {
+  const [text, setText] = useState(value)
+  const commit = () => {
+    if (text !== value) onCommit(value, text)
+  }
+  return (
+    <FieldRow label={label}>
+      <input
+        className="u-input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          e.stopPropagation()
+        }}
+      />
+    </FieldRow>
+  )
+}
+
+export function UITextSection({ node, comp, index }: { node: SceneNode; comp: UITextComponent; index: number }) {
+  const [open, setOpen] = useState(true)
+  const { key } = useComponentCommit(node.id, index)
+
+  return (
+    <div>
+      <ComponentHeader
+        icon={<Type size={13} className="text-[#9fd18a]" />}
+        title="UI Text"
+        open={open}
+        onToggle={() => setOpen(!open)}
+        menuItems={removeMenu(node.id, index)}
+        enabled={comp.enabled !== false}
+        onToggleEnabled={() => key<'enabled', boolean>('enabled', 'Toggle UI Text').onCommit(comp.enabled !== false, comp.enabled === false)}
+      />
+      {open && (
+        <Section>
+          <TextValueRow key={comp.text} label="Text" value={comp.text} onCommit={(b, a) => key<'text', string>('text', 'Set Text').onCommit(b, a)} />
+          <NumberRow label="Font Size" value={comp.fontSize} {...key<'fontSize', number>('fontSize')} />
+          <ColorRow label="Color" value={comp.color} onCommit={(b, a) => key<'color', string>('color', 'Set Text Color').onCommit(b, a)} />
+          <SelectRow
+            label="Anchor X"
+            value={comp.anchorX}
+            options={[
+              { value: 'left', label: 'Left' },
+              { value: 'center', label: 'Center' },
+              { value: 'right', label: 'Right' },
+            ]}
+            onCommit={(b, a) => key<'anchorX', string>('anchorX', 'Set Anchor').onCommit(b, a)}
+          />
+          <SelectRow
+            label="Anchor Y"
+            value={comp.anchorY}
+            options={[
+              { value: 'top', label: 'Top' },
+              { value: 'middle', label: 'Middle' },
+              { value: 'bottom', label: 'Bottom' },
+            ]}
+            onCommit={(b, a) => key<'anchorY', string>('anchorY', 'Set Anchor').onCommit(b, a)}
+          />
+          <NumberRow label="Offset X" value={comp.offsetX} {...key<'offsetX', number>('offsetX')} />
+          <NumberRow label="Offset Y" value={comp.offsetY} {...key<'offsetY', number>('offsetY')} />
         </Section>
       )}
     </div>

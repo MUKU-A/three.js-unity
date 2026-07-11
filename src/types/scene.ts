@@ -210,6 +210,31 @@ export const defaultJoint = (jointType: JointComponent['jointType'] = 'hinge'): 
   restLength: 2,
 })
 
+/** スクリーンスペースのUIテキスト (UnityのCanvas+Text相当の最小実装)。Gameビューにオーバーレイ描画 */
+export interface UITextComponent {
+  type: 'uitext'
+  enabled?: boolean
+  text: string
+  fontSize: number
+  color: string
+  anchorX: 'left' | 'center' | 'right'
+  anchorY: 'top' | 'middle' | 'bottom'
+  offsetX: number
+  offsetY: number
+}
+
+export const defaultUIText = (text = 'New Text'): UITextComponent => ({
+  type: 'uitext',
+  enabled: true,
+  text,
+  fontSize: 18,
+  color: '#ffffff',
+  anchorX: 'left',
+  anchorY: 'top',
+  offsetX: 10,
+  offsetY: 10,
+})
+
 export type Component =
   | MeshComponent
   | MaterialComponent
@@ -220,6 +245,7 @@ export type Component =
   | ColliderComponent
   | AudioSourceComponent
   | JointComponent
+  | UITextComponent
 export type ComponentType = Component['type']
 
 /* ---------------------------------- Node / Scene ---------------------------------- */
@@ -229,6 +255,8 @@ export interface SceneNode {
   name: string
   /** Unity の activeSelf 相当。Object3D.visible に結線 */
   visible: boolean
+  /** Unity の Tag 相当 (自由入力)。スクリプトから other.tag / compareTag で参照 */
+  tag?: string | null
   parentId: NodeId | null
   childrenIds: NodeId[]
   transform: Transform
@@ -298,9 +326,12 @@ export const defaultMaterial = (): MaterialComponent => ({
 export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。使えるフック:
 //   onAwake / onEnable / onStart / onUpdate / onFixedUpdate / onLateUpdate / onDisable / onDestroy
 //   onCollisionEnter/Exit(ctx, other) / onTriggerEnter/Exit(ctx, other)
-// ctx API: node.position|rotation|scale / find(name) / instantiate(src, pos) / destroy(target?)
+// ctx API: node.position|rotation|scale / node.tag / node.compareTag(t) / node.setActive(bool)
+//          node.getComponent(型名) — rigidbodyは .addForce({x,y,z}) / .velocity も使える
+//          find(name) / instantiate(src, pos) / destroy(target?)
 //          physics.raycast(origin, dir, maxDist) / startCoroutine(function*(){ yield 秒 })
-//          animation.play(clipName, fade) / input.getKey|getKeyDown / time.elapsed|delta / log(msg)
+//          animation.play(clipName, fade) / time.elapsed|delta / log(msg)
+//          input.getKey|getKeyDown / input.getAxis('Horizontal'|'Vertical') (WASD+矢印)
 // const props = {...} で宣言した値は Inspector から編集できます。
 const props = {
   speed: 90,

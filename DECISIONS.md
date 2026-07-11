@@ -216,6 +216,28 @@
   外側プレハブを通じて生きる (Variantは未対応 → ROADMAP)。
 - InspectorのPrefabバー: アセット名 + Overrides(n) (オンデマンドdiff計算) + Apply/Revert。
 
+## D-035: Roll-a-Ball完走パック — getAxis / AddForce / Tag / SetActive / UI Text
+- 「公式チュートリアルを本エディタでそのまま完走できるか」を到達基準とし、
+  Unity Learn **Roll-a-Ball** (learn.unity.com/course/roll-a-ball) を実際に手順通り再現して
+  不足APIを特定・実装した (検証: e2e/rollaball.mjs — 実キーボード操縦で12個収集
+  → You Win! → 完全復元まで自動プレイで green)。
+- **input.getAxis('Horizontal'|'Vertical')**: WASD+矢印を-1..1に写像 (旧Input Manager互換の手触り)。
+- **rigidbodyプロキシに addForce / velocity**: `getComponent('rigidbody')` の戻りに物理エンジン直結の
+  メソッドを生やす (SSoTはコンポーネント設定値、力・速度はランタイム状態なのでRapierへ直行)。
+  Unityの「AddForceは次のシミュレーションステップで消費」を再現するため、
+  **step直後に全dynamicボディの外力をリセット** (Rapierの外力は永続なため)。
+- **SceneNode.tag** (自由入力、Inspectorヘッダに入力欄) + `node.tag` / `compareTag`。
+  Tag Managerは作らない (ブラウザ完結エディタでは自由文字列で十分)。プレハブ差分はnameと同格に扱う。
+- **node.setActive(bool)** = GameObject.SetActive: visible切替に加え、再生中はサブツリーの
+  物理ボディ除去/再構築とスクリプトの onDisable/onEnable 発火・Update系スキップまで行う。
+  停止時はスナップショット復元で戻る (D-006の枠内)。
+- **uitextコンポーネント** (UnityのScreen Space Canvas + Textの最小サブセット):
+  text/fontSize/color/anchor(9方位)/offset。GameビューのDOMオーバーレイとして描画し、
+  スクリプトからは `getComponent('uitext').text = ...` — SSoT経由なのでライブ更新・Undo・
+  シリアライズが既存機構に乗る。GameObject > UI > Text メニューを追加。
+  レイアウト/ボタン等のuGUI全体はスコープ外のまま (ROADMAP P3)。
+- チュートリアル対応表: **docs/TUTORIAL_ROLL_A_BALL.md** (C#→JS早見表、Unit毎の操作対応、意図的差異)。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、

@@ -32,7 +32,16 @@ export interface NodeProxy {
   rotation: VecProxy
   scale: VecProxy
   visible: boolean
-  /** UnityのGetComponent: 'material' | 'light' | 'rigidbody' | 'script' 等。scriptは名前でも探せる */
+  /** Unityの gameObject.tag (未設定は 'Untagged') */
+  tag: string
+  /** Unityの CompareTag */
+  compareTag(tag: string): boolean
+  /** Unityの SetActive: 表示 + 物理ボディ + スクリプトをサブツリーごと有効/無効化 (停止で復元) */
+  setActive(active: boolean): void
+  /** Unityの activeSelf */
+  readonly activeSelf: boolean
+  /** UnityのGetComponent: 'material' | 'light' | 'rigidbody' | 'script' 等。scriptは名前でも探せる。
+   *  rigidbody は加えて .addForce({x,y,z}) / .velocity (取得・代入) が使える */
   getComponent(type: string): ComponentProxy | null
   /** Unityの transform.SetParent (nullでルートへ)。再生中のみ有効・停止で復元 */
   setParent(parent: NodeProxy | null): void
@@ -52,11 +61,20 @@ export interface EngineBridge {
   getWorldPosition(id: NodeId): Vec3
   /** ワンショット音声 (アセット名 or ID)。nodeId 指定でその位置から3D再生 */
   playSound(assetRef: string, volume: number, nodeId: NodeId | null): void
+  /** Rigidbody.AddForce 相当 (連続力, ステップ毎にリセット = Unity互換) */
+  addForce(id: NodeId, force: Vec3): void
+  /** Rigidbody.velocity の取得/設定 */
+  getLinearVelocity(id: NodeId): Vec3
+  setLinearVelocity(id: NodeId, v: Vec3): void
+  /** GameObject.SetActive 相当 (サブツリーの表示+物理+スクリプトを切替) */
+  setNodeActive(id: NodeId, active: boolean): void
 }
 
 export interface GameInput {
   getKey(key: string): boolean
   getKeyDown(key: string): boolean
+  /** Input.GetAxis 相当: 'Horizontal' (A/D・←/→) / 'Vertical' (W/S・↑/↓) → -1..1 */
+  getAxis(axis: string): number
   /** 0=左 1=中 2=右 (Unity互換) */
   getMouseButton(button: number): boolean
   getMouseButtonDown(button: number): boolean
@@ -132,18 +150,29 @@ function makeVecProxy(id: NodeId, key: keyof Transform): VecProxy {
   }
 }
 
-/** コンポーネントの live 読み書きプロキシ (書き込みは transientPatchComponent 経由) */
-function makeComponentProxy(id: NodeId, componentIndex: number): ComponentProxy {
+/** コンポーネントの live 読み書きプロキシ (書き込みは transientPatchComponent 経由)。
+ *  rigidbody には物理エンジン直結の addForce / velocity を追加で生やす (Unityの rb API 相当) */
+function makeComponentProxy(id: NodeId, componentIndex: number, bridge?: EngineBridge): ComponentProxy {
+  const compType = () => st().scene.nodes[id]?.components[componentIndex]?.type
   return new Proxy(
     {},
     {
       get(_t, key: string) {
+        if (bridge && compType() === 'rigidbody') {
+          if (key === 'addForce') return (f: Vec3) => bridge.addForce(id, { x: f.x ?? 0, y: f.y ?? 0, z: f.z ?? 0 })
+          if (key === 'velocity') return bridge.getLinearVelocity(id)
+        }
         const c = st().scene.nodes[id]?.components[componentIndex] as unknown as Record<string, unknown> | undefined
         return c?.[key]
       },
       set(_t, key: string, value: unknown) {
         const c = st().scene.nodes[id]?.components[componentIndex]
         if (!c || key === 'type') return false
+        if (bridge && c.type === 'rigidbody' && key === 'velocity') {
+          const v = value as Vec3
+          bridge.setLinearVelocity(id, { x: v.x ?? 0, y: v.y ?? 0, z: v.z ?? 0 })
+          return true
+        }
         st().transientPatchComponent(id, componentIndex, { [key]: value } as never)
         return true
       },
@@ -170,6 +199,22 @@ export function makeNodeProxy(id: NodeId, bridge?: EngineBridge): NodeProxy {
     set visible(v: boolean) {
       if (st().scene.nodes[id]) st().transientPatchNode(id, { visible: v })
     },
+    get tag() {
+      return st().scene.nodes[id]?.tag || 'Untagged'
+    },
+    set tag(t: string) {
+      if (st().scene.nodes[id]) st().transientPatchNode(id, { tag: t })
+    },
+    compareTag(tag: string) {
+      return (st().scene.nodes[id]?.tag || 'Untagged') === tag
+    },
+    setActive(active: boolean) {
+      if (bridge) bridge.setNodeActive(id, active)
+      else if (st().scene.nodes[id]) st().transientPatchNode(id, { visible: active })
+    },
+    get activeSelf() {
+      return st().scene.nodes[id]?.visible ?? false
+    },
     getComponent(type: string) {
       const node = st().scene.nodes[id]
       if (!node) return null
@@ -177,7 +222,7 @@ export function makeNodeProxy(id: NodeId, bridge?: EngineBridge): NodeProxy {
       const idx = node.components.findIndex(
         (c) => c.type === type || (c.type === 'script' && (c as { name?: string }).name === type),
       )
-      return idx >= 0 ? makeComponentProxy(id, idx) : null
+      return idx >= 0 ? makeComponentProxy(id, idx, bridge) : null
     },
     setParent(parent: NodeProxy | null) {
       const g = st().scene
@@ -274,6 +319,8 @@ export class ScriptRuntime {
   private input: GameInput
   private bridge: EngineBridge
   private proxyCache = new Map<NodeId, NodeProxy>()
+  /** SetActive(false) されたノード (Update系・イベント配送をスキップ) */
+  private inactiveNodes = new Set<NodeId>()
 
   constructor(input: GameInput, bridge: EngineBridge) {
     this.input = input
@@ -338,6 +385,23 @@ export class ScriptRuntime {
       }
     }
     this.instances = this.instances.filter((i) => !ids.has(i.nodeId))
+    for (const id of ids) this.inactiveNodes.delete(id)
+  }
+
+  /** SetActive 相当: 対象ノード群のスクリプトを onDisable/onEnable 付きで停止/再開 */
+  setNodesActive(ids: NodeId[], active: boolean) {
+    for (const id of ids) {
+      const changed = active ? this.inactiveNodes.delete(id) : !this.inactiveNodes.has(id)
+      if (!active) this.inactiveNodes.add(id)
+      if (!changed) continue
+      for (const inst of this.instances) {
+        if (inst.nodeId === id) this.safeCall(inst, active ? 'onEnable' : 'onDisable')
+      }
+    }
+  }
+
+  private isActive(inst: ScriptInstance): boolean {
+    return !this.inactiveNodes.has(inst.nodeId)
   }
 
   private createInstancesForNode(id: NodeId, quiet: boolean): number {
@@ -437,7 +501,7 @@ export class ScriptRuntime {
     this.elapsed += dt
     for (const inst of this.instances) {
       inst.ctx.time.delta = dt
-      this.safeCall(inst, 'onUpdate', dt)
+      if (this.isActive(inst)) this.safeCall(inst, 'onUpdate', dt)
     }
     /* コルーチン (Update後, Unityと同順)。yield 秒数=待機 / yield 0や値なし=次フレーム */
     this.coroutines = this.coroutines.filter((co) => {
@@ -456,11 +520,15 @@ export class ScriptRuntime {
   }
 
   fixedUpdate(fixedDt: number) {
-    for (const inst of this.instances) this.safeCall(inst, 'onFixedUpdate', fixedDt)
+    for (const inst of this.instances) {
+      if (this.isActive(inst)) this.safeCall(inst, 'onFixedUpdate', fixedDt)
+    }
   }
 
   lateUpdate(dt: number) {
-    for (const inst of this.instances) this.safeCall(inst, 'onLateUpdate', dt)
+    for (const inst of this.instances) {
+      if (this.isActive(inst)) this.safeCall(inst, 'onLateUpdate', dt)
+    }
   }
 
   /** 物理イベントをスクリプトへ配送 */
@@ -474,6 +542,7 @@ export class ScriptRuntime {
           ? ('onCollisionEnter' as const)
           : ('onCollisionExit' as const)
       for (const inst of this.instances) {
+        if (!this.isActive(inst)) continue
         if (inst.nodeId === ev.a) this.safeCall(inst, hookName, this.proxyFor(ev.b))
         else if (inst.nodeId === ev.b) this.safeCall(inst, hookName, this.proxyFor(ev.a))
       }
@@ -486,6 +555,7 @@ export class ScriptRuntime {
     this.instances = []
     this.coroutines = []
     this.proxyCache.clear()
+    this.inactiveNodes.clear()
   }
 
   private safeCall(inst: ScriptInstance, hook: keyof CompiledScript & string, arg?: unknown) {
