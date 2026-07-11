@@ -35,15 +35,19 @@ npm run build    # 本番ビルド (tsc + vite)
   `node.position/rotation/scale/worldPosition`、**`node.tag` / `compareTag`** (InspectorのTag欄)、
   **`node.setActive(bool)`** (GameObject.SetActive相当 — 表示+物理+スクリプトをサブツリーごと切替)、
   **`node.getComponent(型|スクリプト名)`** (live読み書き。**rigidbodyは `.addForce({x,y,z})` /
-  `.velocity`** で物理エンジンを直接駆動)、**`node.setParent`**、`find`、
+  `.velocity`** で物理エンジンを直接駆動。**スクリプトのトップレベル関数はメソッドとして
+  相互呼び出し可能**)、**`findObjectOfType(スクリプト名)`**、**`invoke(関数名, 秒)`**、
+  **`restartScene()`** (LoadScene相当)、**`node.setParent`**、`find`、
   **`instantiate` / `destroy`**、**`physics.raycast`**、**`screenPointToRay`**、
   **`startCoroutine`**(generator, `yield 秒`)、**`animation.play(clip, fade)`**、
   `input.getKey/getKeyDown/getMouseButton/getMouseButtonDown/mousePosition/`**`getAxis('Horizontal'|'Vertical')`**、
-  `time`、`log`。内蔵スクリプトエディタ付き
-- **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰) と Box/Sphere Collider
+  `time`、`log`。`enabled` は再生中の切替が即反映 (Behaviour.enabled)。内蔵スクリプトエディタ付き
+- **物理演算 (Rapier)**: Rigidbody (質量/重力/キネマティック/減衰/**Collision Detection
+  (Continuous=CCD, 高速すり抜け対策)**) と Box/Sphere Collider
   (反発/摩擦/センター/サイズ/**Is Trigger**、選択中は緑ワイヤーフレーム表示)。固定50Hzステップ、
   **衝突/トリガーイベントをスクリプトへ配送**。▶ 再生で落下・衝突し、⏹ 停止で完全復元。
-  Rigidbodyなしのコライダーは静的衝突体 (Unity互換)
+  Rigidbodyなしのコライダーは静的衝突体 (Unity互換)。Mesh Filterのチェックで
+  **MeshRenderer.enabled** 相当 (見えない判定ボックスが作れる)
 - **アニメーション**: モデルのClipをInspectorで選択 (All/None/Clip名)、スクリプトから
   crossfade切替。**FBX / OBJ** のインポートにも対応
 - **Prefab (差分オーバーライド対応)**: 右クリック「Create Prefab」でアセット化 (Hierarchyで**青表示**)、
@@ -101,10 +105,14 @@ Unity公式ドキュメント索引: **[docs/UNITY_DOC_LINKS.md](./docs/UNITY_DO
 
 ## チュートリアルで試す
 
-Unity公式の入門チュートリアル **Roll-a-Ball (玉転がし)** を本エディタでそのまま完走できます:
-**[docs/TUTORIAL_ROLL_A_BALL.md](./docs/TUTORIAL_ROLL_A_BALL.md)** (公式手順 → 本エディタ操作の対応表 +
-C#→JS変換済みスクリプト)。全手順は `e2e/rollaball.mjs` で自動検証済み
-(キーボード操縦で12個収集 → "You Win!" → ⏹完全復元)。
+定番のUnity入門チュートリアル2本を、本エディタでそのまま完走できます (どちらも自動プレイでE2E検証済み):
+
+- **Roll-a-Ball (玉転がし, Unity公式 Learn)** → **[docs/TUTORIAL_ROLL_A_BALL.md](./docs/TUTORIAL_ROLL_A_BALL.md)**
+  (`e2e/rollaball.mjs`: キーボード操縦で12個収集 → "You Win!" → ⏹完全復元)
+- **Cubethon (Brackeys「How to Make a Video Game」)** → **[docs/TUTORIAL_CUBETHON.md](./docs/TUTORIAL_CUBETHON.md)**
+  (`e2e/cubethon.mjs`: 衝突死/落下死 → 再生中の自動リスタート(LoadScene相当) → 完走 "LEVEL COMPLETE")
+
+いずれも「公式手順 → 本エディタ操作」の対応表とC#→JS変換済みスクリプトを収録。
 
 ## 拡張余地
 

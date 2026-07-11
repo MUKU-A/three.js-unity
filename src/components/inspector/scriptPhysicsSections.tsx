@@ -275,6 +275,15 @@ export function RigidbodySection({ node, comp, index }: { node: SceneNode; comp:
           <NumberRow label="Angular Damping" value={comp.angularDamping} {...key<number>('angularDamping')} />
           <CheckboxRow label="Use Gravity" value={comp.useGravity} onCommit={(b, a) => key<boolean>('useGravity').onCommit(b, a)} />
           <CheckboxRow label="Is Kinematic" value={comp.isKinematic} onCommit={(b, a) => key<boolean>('isKinematic').onCommit(b, a)} />
+          <SelectRow
+            label="Collision Detection"
+            value={comp.collisionDetection ?? 'discrete'}
+            options={[
+              { value: 'discrete', label: 'Discrete' },
+              { value: 'continuous', label: 'Continuous' },
+            ]}
+            onCommit={(b, a) => key<string>('collisionDetection').onCommit(b, a)}
+          />
         </div>
       )}
     </div>

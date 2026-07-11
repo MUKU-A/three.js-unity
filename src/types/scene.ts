@@ -41,6 +41,8 @@ export type PrimitiveKind =
 
 export interface MeshComponent {
   type: 'mesh'
+  /** MeshRenderer.enabled 相当 (未定義=true)。falseで描画のみ消える (コライダーは生きる, D-036) */
+  enabled?: boolean
   /** プリミティブ種別。assetId 指定時は無視される */
   geometry: PrimitiveKind
   /** GLB/FBX/OBJアセット参照 (Projectパネルからのインポート品) */
@@ -123,6 +125,8 @@ export interface ScriptComponent {
 /** Rigidbody (Rapier結線, D-026)。isKinematic=trueで物理の影響を受けない移動体 */
 export interface RigidbodyComponent {
   type: 'rigidbody'
+  /** Unityの Collision Detection。高速移動体は 'continuous' (CCD) にしないとすり抜ける (D-036) */
+  collisionDetection?: 'discrete' | 'continuous'
   mass: number
   useGravity: boolean
   isKinematic: boolean
@@ -327,8 +331,11 @@ export const DEFAULT_SCRIPT_CODE = `// UnityのMonoBehaviour相当。使える�
 //   onAwake / onEnable / onStart / onUpdate / onFixedUpdate / onLateUpdate / onDisable / onDestroy
 //   onCollisionEnter/Exit(ctx, other) / onTriggerEnter/Exit(ctx, other)
 // ctx API: node.position|rotation|scale / node.tag / node.compareTag(t) / node.setActive(bool)
-//          node.getComponent(型名) — rigidbodyは .addForce({x,y,z}) / .velocity も使える
-//          find(name) / instantiate(src, pos) / destroy(target?)
+//          node.getComponent(型名) — rigidbodyは .addForce({x,y,z}) / .velocity も使える。
+//          スクリプトのトップレベル関数は他スクリプトから呼べる:
+//          ctx.findObjectOfType('GameManager').EndGame() (FindObjectOfType相当)
+//          find(name) / instantiate(src, pos) / destroy(target?) / invoke(関数名, 秒) (Invoke相当)
+//          restartScene() (LoadScene相当: シーンを初期状態から再開)
 //          physics.raycast(origin, dir, maxDist) / startCoroutine(function*(){ yield 秒 })
 //          animation.play(clipName, fade) / time.elapsed|delta / log(msg)
 //          input.getKey|getKeyDown / input.getAxis('Horizontal'|'Vertical') (WASD+矢印)

@@ -91,7 +91,7 @@ class ThreeEngine {
   private readonly gameMouseButtons = new Set<number>()
   private readonly gameMouseButtonsDown = new Set<number>()
   private readonly gameMousePos = { x: 0, y: 0 }
-  private readonly scriptRuntime = new ScriptRuntime(
+  private readonly scriptRuntime: ScriptRuntime = new ScriptRuntime(
     {
       getKey: (k) => this.gameKeys.has(k.toLowerCase()),
       getKeyDown: (k) => this.gameKeysDown.has(k.toLowerCase()),
@@ -128,6 +128,24 @@ class ThreeEngine {
       getLinearVelocity: (id) => this.physicsWorld.getLinearVelocity(id),
       setLinearVelocity: (id, v) => this.physicsWorld.setLinearVelocity(id, v),
       setNodeActive: (id, active) => this.setNodeActive(id, active),
+      callScriptMethod: (nodeId, scriptName, method, arg) => this.scriptRuntime.callMethod(nodeId, scriptName, method, arg),
+      hasScriptMethod: (nodeId, scriptName, method) => this.scriptRuntime.hasMethod(nodeId, scriptName, method),
+      findScriptNode: (scriptName) => this.scriptRuntime.findScriptNode(scriptName),
+      restartScene: () => {
+        /* SceneManager.LoadScene(現在のシーン) 相当: スクリプト実行の外で stop→play (D-036)。
+           stopがスナップショットを復元し、playが復元済み状態を再スナップショットする。
+           UnityのLoadSceneはConsoleを消さないので Clear on Play は一時的に無効化する */
+        if (useEditorStore.getState().mode === 'edit') return
+        setTimeout(() => {
+          const s = useEditorStore.getState()
+          if (s.mode === 'edit') return
+          const keepClearOnPlay = s.clearOnPlay
+          useEditorStore.setState({ clearOnPlay: false })
+          s.stop()
+          useEditorStore.getState().play()
+          useEditorStore.setState({ clearOnPlay: keepClearOnPlay })
+        }, 0)
+      },
     },
   )
   private readonly audioManager = new AudioManager()

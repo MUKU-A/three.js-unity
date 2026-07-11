@@ -165,6 +165,7 @@ export class PhysicsWorld {
         .setLinearDamping(rb.linearDamping)
         .setAngularDamping(rb.angularDamping)
         .setGravityScale(rb.useGravity ? 1 : 0)
+      if (rb.collisionDetection === 'continuous') desc.setCcdEnabled(true)
     }
     desc.setTranslation(pos.x, pos.y, pos.z).setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w })
     const body = this.world.createRigidBody(desc)

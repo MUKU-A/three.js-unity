@@ -56,6 +56,7 @@
 | **オーディオ (AudioSource)** | ✅ .mp3/.wav/.oggインポート、AudioSource (volume/loop/playOnAwake/spatial/距離減衰)、GameカメラへのListener自動付帯、⏸連動suspend、ctx.playSound ワンショット (D-032)。Audio Mixerは対象外 |
 | **物理ジョイント** | ✅ Fixed / Hinge / Spring (Rapier impulse joints)。Connected Body選択、None=ワールド係留、Anchor/Axis/バネ係数 (D-033)。振り子・同伴落下・係留をE2E実測 |
 | **Roll-a-Ball完走パック** | ✅ input.getAxis、rigidbody.addForce/velocity (step毎リセット=Unity互換)、Tag + compareTag、SetActive (物理+スクリプト連動)、UI Text最小実装 (D-035)。公式チュートリアルをE2E自動プレイで完走検証 (docs/TUTORIAL_ROLL_A_BALL.md) |
+| **Cubethon完走パック** | ✅ スクリプト間メソッド呼出 + findObjectOfType、Behaviour.enabledライブ反映、Invoke、restartScene (LoadScene相当・Console保持)、MeshRenderer.enabled、Rigidbody CCD (D-036)。Brackeys「How to Make a Video Game」をE2E自動プレイで完走検証 (docs/TUTORIAL_CUBETHON.md) |
 
 ## 未対応 — 優先度順の実装計画
 

@@ -183,6 +183,8 @@ export function MeshSection({ node, comp, index }: { node: SceneNode; comp: Mesh
         open={open}
         onToggle={() => setOpen(!open)}
         menuItems={removeMenu(node.id, index)}
+        enabled={comp.enabled !== false}
+        onToggleEnabled={() => key<'enabled', boolean>('enabled', 'Toggle Renderer').onCommit(comp.enabled !== false, comp.enabled === false)}
       />
       {open && (
         <Section>

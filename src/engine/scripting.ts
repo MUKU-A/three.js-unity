@@ -68,6 +68,13 @@ export interface EngineBridge {
   setLinearVelocity(id: NodeId, v: Vec3): void
   /** GameObject.SetActive 相当 (サブツリーの表示+物理+スクリプトを切替) */
   setNodeActive(id: NodeId, active: boolean): void
+  /** 他スクリプトのトップレベル関数を呼ぶ (SendMessage/直接メソッド呼出相当, D-036) */
+  callScriptMethod(nodeId: NodeId, scriptName: string | null, method: string, arg?: unknown): unknown
+  hasScriptMethod(nodeId: NodeId, scriptName: string | null, method: string): boolean
+  /** FindObjectOfType<T> 相当: スクリプト名から最初のノードを探す */
+  findScriptNode(scriptName: string): NodeId | null
+  /** SceneManager.LoadScene(現在のシーン) 相当: 再生を止めずにシーンをリロード */
+  restartScene(): void
 }
 
 export interface GameInput {
@@ -90,6 +97,13 @@ export interface ScriptCtx {
   /** Camera.ScreenPointToRay 相当。input.mousePosition と組み合わせてクリック判定に使う */
   screenPointToRay(x: number, y: number): { origin: Vec3; direction: Vec3 } | null
   find(name: string): NodeProxy | null
+  /** Unityの FindObjectOfType<T>: スクリプト名で最初のインスタンスを探し、そのスクリプトプロキシを返す。
+   *  トップレベル関数はメソッドとして呼べる (例: ctx.findObjectOfType('GameManager').EndGame()) */
+  findObjectOfType(scriptName: string): ComponentProxy | null
+  /** Unityの Invoke: 自スクリプトの関数名 (または関数) を delay 秒後に呼ぶ */
+  invoke(method: string | ((ctx: ScriptCtx) => void), delaySeconds: number): void
+  /** Unityの SceneManager.LoadScene(現在のシーン): 再生モードのままシーンを初期状態から再開 */
+  restartScene(): void
   log(message: unknown): void
   /** Unityの Instantiate: 既存ノード(名前 or proxy)を複製して配置。返り値は新ノードのproxy */
   instantiate(source: NodeProxy | string, position?: { x: number; y: number; z: number }): NodeProxy | null
@@ -157,13 +171,22 @@ function makeComponentProxy(id: NodeId, componentIndex: number, bridge?: EngineB
   return new Proxy(
     {},
     {
-      get(_t, key: string) {
+      get(_t, key: string | symbol) {
+        if (typeof key !== 'string') return undefined
         if (bridge && compType() === 'rigidbody') {
           if (key === 'addForce') return (f: Vec3) => bridge.addForce(id, { x: f.x ?? 0, y: f.y ?? 0, z: f.z ?? 0 })
           if (key === 'velocity') return bridge.getLinearVelocity(id)
         }
         const c = st().scene.nodes[id]?.components[componentIndex] as unknown as Record<string, unknown> | undefined
-        return c?.[key]
+        if (c && key in c) return c[key]
+        /* スクリプトのトップレベル関数をメソッドとして公開 (gameManager.CompleteLevel() 相当, D-036) */
+        if (bridge && c && (c as { type?: string }).type === 'script') {
+          const scriptName = (c as { name?: string }).name ?? null
+          if (key !== 'then' && bridge.hasScriptMethod(id, scriptName, key)) {
+            return (arg?: unknown) => bridge.callScriptMethod(id, scriptName, key, arg)
+          }
+        }
+        return undefined
       },
       set(_t, key: string, value: unknown) {
         const c = st().scene.nodes[id]?.components[componentIndex]
@@ -256,6 +279,8 @@ export interface CompiledScript {
   onTriggerEnter: Hook<[ScriptCtx, NodeProxy]>
   onTriggerExit: Hook<[ScriptCtx, NodeProxy]>
   props: Record<string, number | string | boolean> | null
+  /** トップレベルで宣言された全関数 (フック以外も含む)。他スクリプトからのメソッド呼出/Invoke用 (D-036) */
+  fns: Record<string, ((ctx: ScriptCtx, arg?: unknown) => unknown) | null>
 }
 
 const HOOK_NAMES = [
@@ -273,10 +298,23 @@ const HOOK_NAMES = [
   'onTriggerExit',
 ] as const
 
-/** ユーザーコードを評価して hooks と props 宣言を取り出す。失敗時は Error を投げる */
+/** コードからトップレベルの function 宣言名を抽出 (メソッド呼出/Invoke用) */
+function declaredFunctionNames(code: string): string[] {
+  const names = new Set<string>()
+  const re = /^[ \t]*(?:async[ \t]+)?function[ \t*]+([A-Za-z_$][\w$]*)/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(code))) names.add(m[1])
+  return [...names]
+}
+
+/** ユーザーコードを評価して hooks / props / 全関数を取り出す。失敗時は Error を投げる */
 export function compileScript(code: string): CompiledScript {
   const ret = HOOK_NAMES.map((h) => `${h}: typeof ${h} === 'function' ? ${h} : null`).join(',\n  ')
-  const factory = new Function(`"use strict";\n${code}\n;return {\n  ${ret},\n  props: typeof props !== 'undefined' ? props : null,\n};`)
+  const fnNames = declaredFunctionNames(code)
+  const fnRet = fnNames.map((n) => `${JSON.stringify(n)}: typeof ${n} === 'function' ? ${n} : null`).join(', ')
+  const factory = new Function(
+    `"use strict";\n${code}\n;return {\n  ${ret},\n  props: typeof props !== 'undefined' ? props : null,\n  fns: { ${fnRet} },\n};`,
+  )
   return factory() as CompiledScript
 }
 
@@ -401,7 +439,48 @@ export class ScriptRuntime {
   }
 
   private isActive(inst: ScriptInstance): boolean {
-    return !this.inactiveNodes.has(inst.nodeId)
+    if (this.inactiveNodes.has(inst.nodeId)) return false
+    /* Behaviour.enabled のライブ反映: 再生中に movement.enabled = false されたら Update系を止める (D-036) */
+    const comp = st().scene.nodes[inst.nodeId]?.components[inst.componentIndex]
+    return !!comp && comp.type === 'script' && comp.enabled !== false
+  }
+
+  /** 他スクリプトのトップレベル関数呼出 (コンポーネントプロキシ/Invoke/SendMessage相当, D-036) */
+  callMethod(nodeId: NodeId, scriptName: string | null, method: string, arg?: unknown): unknown {
+    const inst = this.findInstance(nodeId, scriptName, method)
+    if (!inst) return undefined
+    const fn = inst.hooks.fns[method]
+    if (!fn) return undefined
+    try {
+      return fn(inst.ctx, arg)
+    } catch (err) {
+      st().log('error', `[${inst.scriptName}] ${method}() error: ${String(err)}`)
+      return undefined
+    }
+  }
+
+  hasMethod(nodeId: NodeId, scriptName: string | null, method: string): boolean {
+    return !!this.findInstance(nodeId, scriptName, method)?.hooks.fns[method]
+  }
+
+  /** FindObjectOfType 相当: スクリプト名を持つ最初のノード (実行中はインスタンス優先) */
+  findScriptNode(scriptName: string): NodeId | null {
+    const inst = this.instances.find((i) => i.scriptName === scriptName && !i.dead)
+    if (inst) return inst.nodeId
+    const found = Object.values(st().scene.nodes).find((n) =>
+      n.components.some((c) => c.type === 'script' && (c as { name?: string }).name === scriptName),
+    )
+    return found?.id ?? null
+  }
+
+  private findInstance(nodeId: NodeId, scriptName: string | null, method: string): ScriptInstance | undefined {
+    return this.instances.find(
+      (i) =>
+        i.nodeId === nodeId &&
+        !i.dead &&
+        (scriptName === null || i.scriptName === scriptName) &&
+        !!i.hooks.fns[method],
+    )
   }
 
   private createInstancesForNode(id: NodeId, quiet: boolean): number {
@@ -434,7 +513,7 @@ export class ScriptRuntime {
 
   private makeCtx(id: NodeId, componentIndex: number, scriptName: string): ScriptCtx {
     const self = this
-    return {
+    const ctx: ScriptCtx = {
       node: this.proxyFor(id),
       get props() {
         const c = st().scene.nodes[id]?.components[componentIndex]
@@ -453,6 +532,21 @@ export class ScriptRuntime {
       find(name: string) {
         const found = Object.values(st().scene.nodes).find((n) => n.name === name)
         return found ? self.proxyFor(found.id) : null
+      },
+      findObjectOfType(scriptName: string) {
+        const nid = self.bridge.findScriptNode(scriptName)
+        return nid ? self.proxyFor(nid).getComponent(scriptName) : null
+      },
+      invoke(method, delaySeconds) {
+        const g = (function* () {
+          if (delaySeconds > 0) yield delaySeconds
+          if (typeof method === 'function') method(ctx)
+          else self.callMethod(id, scriptName, method)
+        })()
+        self.coroutines.push({ gen: g, wait: 0, scriptName })
+      },
+      restartScene() {
+        self.bridge.restartScene()
       },
       log(message: unknown) {
         st().log('info', `[${scriptName}] ${typeof message === 'object' ? JSON.stringify(message) : String(message)}`)
@@ -495,6 +589,7 @@ export class ScriptRuntime {
         self.bridge.playSound(assetNameOrId, volume, id)
       },
     }
+    return ctx
   }
 
   update(dt: number) {

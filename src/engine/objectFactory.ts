@@ -299,6 +299,8 @@ export function updateContainer(container: NodeContainer, node: SceneNode, prev:
         }
       })
     }
+    /* MeshRenderer.enabled 相当 (D-036): コライダー等は生かしたまま描画だけ消す */
+    if (parts.mesh) parts.mesh.visible = meshComp.enabled !== false
     /* material を mesh 部品(GLBなら全メッシュ)に適用 */
     if (parts.mesh) {
       if (matComp) {

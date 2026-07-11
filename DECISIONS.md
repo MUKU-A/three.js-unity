@@ -238,6 +238,25 @@
   レイアウト/ボタン等のuGUI全体はスコープ外のまま (ROADMAP P3)。
 - チュートリアル対応表: **docs/TUTORIAL_ROLL_A_BALL.md** (C#→JS早見表、Unit毎の操作対応、意図的差異)。
 
+## D-036: Cubethon完走パック — スクリプト間連携 / LoadScene / Behaviour.enabled / CCD
+- 2本目のチュートリアル完走検証として Brackeys「How to Make a Video Game」(Cubethon) を採用。
+  原典C# (コミュニティ追走リポジトリから動画通りのコードを取得) が要求した不足機能を実装
+  (検証: e2e/cubethon.mjs — 衝突死/落下死/自動リスタート/完走まで自動プレイ16チェック green)。
+- **スクリプトのトップレベル関数を公開メソッド化**: compileScript が全 function 宣言を抽出し、
+  script のコンポーネントプロキシから `gm.CompleteLevel()` のように呼べる (第1引数=相手のctx)。
+  `FindObjectOfType<T>()` 相当の **ctx.findObjectOfType(スクリプト名)** も追加。
+- **Behaviour.enabled のライブ反映**: `movement.enabled = false` を Update系/イベント配送が
+  毎呼び出しでSSoTから確認 (従来は再生開始時に固定)。
+- **ctx.invoke(関数名|fn, 秒)**: Unityの Invoke。コルーチン機構に乗せた糖衣。
+- **ctx.restartScene()**: SceneManager.LoadScene(現行シーン) 相当。スクリプト実行外で stop→play
+  (スナップショット復元→再スナップショット) し、再生モードを維持。**Clear on Play は一時無効化**
+  (UnityのLoadSceneはConsoleを消さない — E2Eで発見した忠実度バグの修正)。
+- **MeshRenderer.enabled** (mesh.enabled): 描画だけ消してコライダーを残す。見えないEndTrigger用。
+  Inspector の Mesh Filter ヘッダにチェックボックス。
+- **Rigidbody Collision Detection (CCD)**: collisionDetection='continuous' で Rapier の
+  setCcdEnabled。forwardForce 2000 の高速キューブが障害物をすり抜ける実問題への対処 (動画内の手順と同一)。
+- 対応表: **docs/TUTORIAL_CUBETHON.md**。
+
 ## D-018: Unity公式ドキュメントはリポジトリに含めない (リンク索引のみ)
 - 「公式ドキュメント全量をGitHubに追加」する案は不採用。理由:
   (1) Unity公式ドキュメントはUnity Technologiesの著作物でオープンライセンスではなく、
